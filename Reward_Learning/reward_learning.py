@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split
 import random
 from datetime import datetime
 import os
+import argparse
 
 from load_training_data import get_all_statistics,get_all_statistics_aug_human
 from rl_algos import value_iteration, get_gt_avg_return,build_pi,iterative_policy_evaluation,learn_successor_feature_iter,build_random_policy
@@ -15,33 +16,63 @@ from generate_random_policies import calc_value, calc_advantage
 import random_policy_data
 from utils import augment_data, find_reward_features, format_X, format_y, sigmoid, get_pref, disp_mmv
 
-keep_ties = True
-n_prob_samples = 1
-n_prob_iters = 30
 
-GAMMA=0.999
-include_dif_traj_lengths = True
+
+parser = argparse.ArgumentParser(description='PyTorch RL trainer')
+
+parser.add_argument('--keep_ties', action='store_true', default=True,
+                    help='Keep indifferent preferences in preference dataset')
+parser.add_argument('--include_dif_traj_lengths', action='store_true', default=True,
+                    help='Include segment pairs where one segment terminates earlier than the other')
+parser.add_argument('--n_prob_samples', default=1, type=int,
+                    help='Number of times a preference label is sampled from each segment pair when using a stochastic preference model')
+parser.add_argument('--n_prob_iters', default=30, type=int,
+                    help='Number of trials for learning a reward function when using a stochastic preference model')
+parser.add_argument('--GAMMA', default=0.999, type=float,
+                    help='Discount factor for preference labeling and reward learning/evaluation')
+parser.add_argument('--mode', default="sigmoid", type=str,
+                    help='Either deterministic (for error-free synthetic preference dataset), sigmoid (for stochastic synthetic preference dataset), or deterministic_user_data (for the human preference dataset)')
+parser.add_argument('--LR', default=2, type=float,
+                    help='Learning rate')
+parser.add_argument('--N_ITERS', default=30000, type=int,
+                    help='Number of training iterations')
+parser.add_argument('--use_random_MDPs',  action='store_true', default=False,
+                    help='Run expirements on set of 100 random MDPs instead of on the original delivery domain')
+parser.add_argument('--partition_human_data',  action='store_true', default=False,
+                    help='Run expirements on partitions of the human preference dataset instead of on the entire dataset')
+parser.add_argument('--preference_model',  type=str, default="pr",
+                    help='preference model for how we generate synthetic preferences (pr for partial return model, er for regret model)')
+parser.add_argument('--preference_assum',  type=str, default="pr",
+                    help='preference model for how we learn a reward function from preferences (pr for partial return model, er for regret model)')
+args = parser.parse_args()
+
+keep_ties = args.keep_ties
+n_prob_samples = args.n_prob_samples
+n_prob_iters = args.n_prob_iters
+
+GAMMA=args.GAMMA
+include_dif_traj_lengths = args.include_dif_traj_lengths
 
 #mode = "deterministic_user_data"
 #mode = "user_data"
 # mode = "sigmoid" 
-mode = "deterministic"
+mode = args.mode
 # gt_V,_ = value_iteration(GAMMA=0.999)
-LR = 2
-N_ITERS = 30000
+LR = args.LR
+N_ITERS = args.N_ITERS
 # optimizer_add = "line_search"
 # optimizer_add = "mini_batch"
 # optimizer_add = "cyclic"
 optimizer_add = "none"
 
-use_random_MDPs = False
+use_random_MDPs = args.use_random_MDPs
 use_random_MDPs_n_length_trajs = False
 
 use_extended_SF = False
 include_actions = False
-partition_human_data = False
-preference_model = "pr" #how we generate prefs
-preference_assum = "pr" #how we learn prefs
+partition_human_data = args.partition_human_data
+preference_model = args.preference_model #how we generate prefs
+preference_assum = args.preference_assum #how we learn prefs
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
