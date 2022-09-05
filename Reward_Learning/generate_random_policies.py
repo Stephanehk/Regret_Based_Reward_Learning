@@ -35,8 +35,9 @@ def generate_random_policy(GAMMA,env=None,gt_rew_vec=None):
     # follow_policy(Qs, 1000,viz_policy=True)
     pi = build_pi(Qs,env=env)
     # psi_og = learn_successor_feature(Qs,V,GAMMA,rew_vec = vec)
-    succ_feat,_,gt_q_succ_feat = learn_successor_feature_iter(pi,GAMMA,rew_vec = vec,env=env)
-    return succ_feat, pi, gt_q_succ_feat
+    succ_feat,sa_succ_feat,gt_q_succ_feat = learn_successor_feature_iter(pi,GAMMA,rew_vec = vec,env=env)
+
+    return succ_feat, sa_succ_feat,pi, gt_q_succ_feat
 
 def is_arr_in_list(myarr, list_arrays):
     return next((True for elem in list_arrays if np.array_equal(elem, myarr)), False)
@@ -44,12 +45,13 @@ def is_arr_in_list(myarr, list_arrays):
 def generate_all_policies(n_policies,GAMMA,env=None,gt_rew_vec=None):
     succ_feats = []
     gt_q_succ_feats = []
+    sa_succ_feats = []
     pis = []
     i = 0
     n_duplicates = 0 #makes sure we do not try and generate more unique policies than exist
     while i < n_policies and n_duplicates < 100:
         i+=1
-        succ_feat, pi, gt_q_succ_feat = generate_random_policy(GAMMA,env,gt_rew_vec)
+        succ_feat, sa_succ_feat, pi, gt_q_succ_feat = generate_random_policy(GAMMA,env,gt_rew_vec)
         if is_arr_in_list(succ_feat, succ_feats):
             i-=1
             n_duplicates+= 1
@@ -57,12 +59,13 @@ def generate_all_policies(n_policies,GAMMA,env=None,gt_rew_vec=None):
             # print ("generated policy: " + str(len(pis)))
             succ_feats.append(succ_feat)
             gt_q_succ_feats.append(gt_q_succ_feat)
+            sa_succ_feats.append(sa_succ_feat)
             pis.append(pi)
-    return succ_feats, pis, gt_q_succ_feats
+    return succ_feats,sa_succ_feats, pis, gt_q_succ_feats
 
 
 def calc_advantage(states,actions,gt_rew_vec=None,env=None):
-    id_ =0
+    id_ =4
     if gt_rew_vec is None or env is None:
         advantage = 0
         for state,action in zip(states,actions):
@@ -91,7 +94,7 @@ def calc_advantage(states,actions,gt_rew_vec=None,env=None):
         return -advantage
 
 def calc_value(state,gt_rew_vec=None,env=None):
-    id_ = 0
+    id_ = 4
     if gt_rew_vec is None or env is None:
         w = [-1,50,-50,1,-1,-2]
         x,y = state
