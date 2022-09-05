@@ -5,6 +5,13 @@ import math
 from load_training_data import get_state_feature, get_action_feature
 from rl_algos import value_iteration, build_pi, learn_successor_feature_iter
 
+def is_in_blocked_area(x,y,board):
+    val = board[x][y]
+    if val == 2 or val == 8:
+        return True
+    else:
+        return False
+
 def find_reward_features(traj,env,use_extended_SF=False,GAMMA=1,traj_length=3):
     traj_ts_x = traj[0][0]
     traj_ts_y = traj[0][1]

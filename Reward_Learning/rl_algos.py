@@ -15,7 +15,7 @@ def learn_successor_feature_iter(pi,FGAMMA,rew_vec=None,env=None):
     if env == None:
         env = GridWorldEnv("2021-07-29_sparseboard2-notrap")
     if type(rew_vec) is np.ndarray:
-        env.set_custom_reward_function(rew_vec)
+        env.set_custom_reward_function(rew_vec[0:6])
 
     THETA = 0.001
     # initialize Q
@@ -114,7 +114,7 @@ def iterative_policy_evaluation(pi,rew_vec=None, set_rand_rew = False, GAMMA=0.9
     # rand_rew_vec = get_random_reward_vector()
     # rand_rew_vec = [-1, -50, 50, 1, -1, -2]
     if  type(rew_vec) is np.ndarray:
-        env.set_custom_reward_function(rew_vec)
+        env.set_custom_reward_function(rew_vec[0:6])
     elif set_rand_rew:
         rand_rew_vec = get_random_reward_vector()
         env.set_custom_reward_function(rew_vec)
@@ -160,7 +160,7 @@ def value_iteration(rew_vec=None, set_rand_rew = False, GAMMA=0.999,env=None,is_
     # rand_rew_vec = get_random_reward_vector()
     # rand_rew_vec = [-1, -50, 50, 1, -1, -2]
     if  type(rew_vec) is np.ndarray and not is_set:
-        env.set_custom_reward_function(rew_vec)
+        env.set_custom_reward_function(rew_vec[0:6])
     elif set_rand_rew:
         rand_rew_vec = get_random_reward_vector()
         env.set_custom_reward_function(rew_vec)
