@@ -30,13 +30,15 @@ parser.add_argument('--n_prob_iters', default=30, type=int,
                     help='Number of trials for learning a reward function when using a stochastic preference model')
 parser.add_argument('--GAMMA', default=0.999, type=float,
                     help='Discount factor for preference labeling and reward learning/evaluation')
-parser.add_argument('--mode', default="sigmoid", type=str,
+parser.add_argument('--mode', default="deterministic", type=str,
                     help='Either deterministic (for error-free synthetic preference dataset), sigmoid (for stochastic synthetic preference dataset), or deterministic_user_data (for the human preference dataset)')
 parser.add_argument('--LR', default=0.5, type=float,
                     help='Learning rate')
 parser.add_argument('--N_ITERS', default=5000, type=int,
                     help='Number of training iterations')
-parser.add_argument('--use_random_MDPs',  action='store_true', default=True,
+parser.add_argument('--use_random_MDPs',  action='store_true', default=False,
+                    help='Run expirements on set of 100 random MDPs instead of on the original delivery domain')
+parser.add_argument('--use_random_MDPs_n_length_trajs',  action='store_true', default=False,
                     help='Run expirements on set of 100 random MDPs instead of on the original delivery domain')
 parser.add_argument('--partition_human_data',  action='store_true', default=False,
                     help='Run expirements on partitions of the human preference dataset instead of on the entire dataset')
@@ -66,20 +68,20 @@ N_ITERS = args.N_ITERS
 optimizer_add = "none"
 
 use_random_MDPs = args.use_random_MDPs
-use_random_MDPs_n_length_trajs = False
+use_random_MDPs_n_length_trajs = args.use_random_MDPs_n_length_trajs
 
 use_extended_SF = False
-run_temp_exp = True
+run_temp_exp = False
 include_actions = False
 partition_human_data = args.partition_human_data
 preference_model = args.preference_model #how we generate prefs
 preference_assum = args.preference_assum #how we learn prefs
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 
 
 if preference_assum == "er" and not use_random_MDPs:
-
     succ_feats = np.load("succ_feats_no_gt.npy",allow_pickle=True)
     pis = np.load("pis_no_gt.npy",allow_pickle=True)
     succ_q_feats = None
@@ -117,10 +119,11 @@ def clean_y(X,R,Y,sess):
             formatted_y.append(np.array(y))
             out_X.append(x)
 
-    loss_coef = (len(out_X)/n_unique_trajs)/n_prob_samples
-    loss_coef = min(1,loss_coef)
-    if mode == "deterministic_user_data":
-        assert loss_coef == 1
+    # loss_coef = (len(out_X)/n_unique_trajs)/n_prob_samples
+    # loss_coef = min(1,loss_coef)
+    # if mode == "deterministic_user_data":
+    #     assert loss_coef == 1
+    loss_coef = 1
 
     # print ("loss coef: " + str(loss_coef))
     return out_X,formatted_y,synth_out_X,synth_formatted_y,synth_y_dist, loss_coef
@@ -262,8 +265,8 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
                     r1_prob = sigmoid((r[0]-r[1])/1)
                     r2_prob = sigmoid((r[1]-r[0])/1)
                 elif preference_model == "er":
-                    r1_prob = sigmoid((r1_er-r2_er)/100)
-                    r2_prob = sigmoid((r2_er-r1_er)/100)
+                    r1_prob = sigmoid((r1_er-r2_er)/1)
+                    r2_prob = sigmoid((r2_er-r1_er)/1)
                 num = np.random.choice([1,0], p=[r1_prob,r2_prob])
                 if num == 1:
                     pref = [1,0]
@@ -568,7 +571,113 @@ all_avg_returns = []
 #
 # trajpairs = []
 # phis = []
-if use_random_MDPs:
+
+
+if use_random_MDPs_n_length_trajs:
+    num_near_opt = {3:0,6:0,9:0,12:0,15:0}
+    num_above_random = {3:0,6:0,9:0,12:0,15:0}
+    all_scaled_returns =  {3:[],6:[],9:[],12:[],15:[]}
+    num_prefs = 3000
+    for trial in range(400,430):
+        # all_trajs = None
+        
+        all_states = None
+        all_actions = None
+
+        with open("random_MDPs/MDP_" + str(trial) +"all_trajss.npy","rb") as f:
+            all_trajss = pickle.load(f)
+        with open("random_MDPs/MDP_" + str(trial) +"all_sess.npy","rb") as f:
+            all_sess = pickle.load(f)
+
+        gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy")
+
+        succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy")
+        succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy")
+
+        # # succ_feats, succ_q_feats = remove_gt_succ_feat(succ_feats,succ_q_feats, gt_rew_vec)
+        # np.save("random_MDPs/MDP_" + str(trial) +"succ_feats.npy", succ_feats)
+        # np.save("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy", succ_q_feats)
+        with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
+            env = pickle.load(rf)
+
+        # print (env.board)
+        # print ("============")
+        traj_lengths = [3,6,9,12,15]
+        for i in range(len(traj_lengths)):
+            print ("=============== TRAJ LENGTH: " + str(traj_lengths[i]) + " ===============")
+            
+            all_trajs = all_trajss[i]
+            all_ses = all_sess[i]
+            if len(all_trajs)>num_prefs:
+                np.random.seed(0)
+                print ("SUBSAMPLING TRAJ PAIRS")
+                idx = np.random.choice(np.arange(len(all_trajs)), num_prefs, replace=False)
+                all_trajs = np.array(all_trajs)[idx]
+                all_ses = np.array(all_ses)[idx]
+
+           
+            all_X = []
+            all_r = [] 
+            for i_, traj_pair in enumerate(all_trajs):
+                
+               
+                phi_dis1,phi1 = find_reward_features(traj_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=traj_lengths[i])
+                phi_dis2,phi2 = find_reward_features(traj_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=traj_lengths[i])
+                all_r.append([np.dot(gt_rew_vec,phi_dis1[0:6]), np.dot(gt_rew_vec,phi_dis2[0:6])])
+                all_X.append([phi_dis1, phi_dis2])
+
+            pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
+
+
+            aX, ay = augment_data(pr_X,synth_max_y,"arr")
+            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env,trajs=all_trajs)
+
+            print ("# of synthetic prefrences: " + str(len(pr_X)))
+            print ("Ground truth reward vector: " + str(gt_rew_vec))
+            V,Q = value_iteration(rew_vec =rew_vect,GAMMA=0.999,env=env)
+            pi = build_pi(Q,env=env)
+            V_under_gt = iterative_policy_evaluation(pi,rew_vec = np.array(gt_rew_vec), GAMMA=0.999,env=env)
+
+            avg_return = np.sum(V_under_gt)/env.n_starts
+            print ("average return following learned policy: ")
+            print (avg_return)
+
+
+            gt_avg_return = get_gt_avg_return(gt_rew_vec=np.array(gt_rew_vec), env=env, GAMMA=0.999)
+
+            #build random policy
+            random_pi = build_random_policy(env=env)
+            print ("evaluating random policy under reward vec: " + str(gt_rew_vec))
+            V_under_random_pi = iterative_policy_evaluation(random_pi,rew_vec = np.array(gt_rew_vec), GAMMA=0.999,env=env)
+            random_avg_return = np.sum(V_under_random_pi)/env.n_starts
+            print ("random policies avg return: ")
+            print (random_avg_return)
+
+            #scale everything: f(z) = (z-x) / (y-x)
+            scaled_return = (avg_return - random_avg_return)/(gt_avg_return - random_avg_return)
+            all_scaled_returns[traj_lengths[i]].append(scaled_return)
+
+            print ("scaled return following learned policy: " + str(scaled_return))
+
+            random_policy_data.changed_gt_rew_vec = False
+            if (scaled_return >= 0.9):
+                num_near_opt[traj_lengths[i]]+=1
+            if (scaled_return >= 0):
+                num_above_random[traj_lengths[i]] +=1
+
+            # assert False
+
+            print ("=================================================================================\n")
+
+        np.save("multi_length_segs_res/400_430_num_prefs="+str(num_prefs)+"main_avg_return_" + str(mode) + "_" + str(preference_model) + "_" + str(preference_assum) + str(use_extended_SF) + "_" +  str(GAMMA) + ".npy",all_scaled_returns)
+        # print ("% of MDPs where near optimal performance was achieved: " + str(100*(num_near_opt/100)) + "%")
+        # print ("% of MDPs where better than random performance was achieved: " + str(100*(num_above_random/100)) + "%")
+        for traj_length in traj_lengths:
+            print ("=============== TRAJ LENGTH: " + str(traj_length) + " ===============")
+            print ("% of MDPs where near optimal performance was achieved: " + str(100*(num_near_opt[traj_length]/30)) + "%")
+            print ("% of MDPs where better than random performance was achieved: " + str(100*(num_above_random[traj_length]/30)) + "%")
+
+elif use_random_MDPs:
     all_num_prefs = [3000]
 
     if run_temp_exp:
@@ -590,7 +699,7 @@ if use_random_MDPs:
         #all_scaled_returns = []
         # for trial in range(100,130):
         
-        for trial in range(308,309):
+        for trial in range(0,30):
             np.random.seed(n_runs)
             n_runs+=1
             # all_trajs = None
@@ -600,16 +709,22 @@ if use_random_MDPs:
             # all_actions = np.load("random_MDPs/MDP_" + str(trial) + "all_actions.npy")
             all_states = None
             all_actions = None
-            all_trajs = np.load("random_MDPs/MDP_" + str(trial) +"all_trajs.npy").tolist()
-            all_ses = np.load("random_MDPs/MDP_" + str(trial) +"all_ses.npy").tolist()
-            gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy")
+            all_trajs = np.load("random_MDPs/MDP_" + str(trial) +"all_trajs.npy",mmap_mode="r").tolist()
+            all_ses = np.load("random_MDPs/MDP_" + str(trial) +"all_ses.npy",mmap_mode="r").tolist()
+            gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy",mmap_mode="r")
 
-            succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy")
-            succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy")
+            if trial < 30 and GAMMA != 0.999:
+                succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+                
+                if use_extended_SF:
+                    sa_succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"sa_succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+                    succ_feats = np.concatenate((succ_feats, sa_succ_feats), axis=3)
+                succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+            else:
+                succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy",mmap_mode="r")
+                succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy",mmap_mode="r")
 
-            # # succ_feats, succ_q_feats = remove_gt_succ_feat(succ_feats,succ_q_feats, gt_rew_vec)
-            # np.save("random_MDPs/MDP_" + str(trial) +"succ_feats.npy", succ_feats)
-            # np.save("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy", succ_q_feats)
+        
             with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
                 env = pickle.load(rf)
                 if trial < 200 or trial > 300:
@@ -625,6 +740,12 @@ if use_random_MDPs:
                         all_ses_uniq.append(ses)
                 all_trajs = all_traj_uniq 
                 all_ses = all_ses_uniq
+
+            if len(all_trajs)>num_prefs and trial < 200:
+                print ("SUBSAMPLING TRAJ PAIRS")
+                idx = np.random.choice(np.arange(len(all_trajs)), num_prefs, replace=False)
+                all_trajs = np.array(all_trajs)[idx]
+                all_ses = np.array(all_ses)[idx]
 
             #only recalculate these for non-prob gridworlds
             if trial < 200 or trial > 300:
@@ -652,19 +773,14 @@ if use_random_MDPs:
 
             # assert False
             
-            if len(all_trajs)>num_prefs:
-                print ("SUBSAMPLING TRAJ PAIRS")
-                idx = np.random.choice(np.arange(len(all_trajs)), num_prefs, replace=False)
-                all_trajs = np.array(all_trajs)[idx]
-                all_ses = np.array(all_ses)[idx]
-                all_X = np.array(all_X)[idx]
-                all_r = np.array(all_r)[idx]
+        
 
             pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
             
         
 
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
+            
             rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env,trajs=all_trajs)
             # np.save("random_MDPs/200_210_trial="+str(trial)+"num_prefs="+str(num_prefs)+"main_avg_return_" + str(mode) + "_" + str(preference_model) + "_" + str(preference_assum) + str(use_extended_SF) + "_" +  str(GAMMA) + ".npy",rew_vect)
             
@@ -720,7 +836,7 @@ if use_random_MDPs:
 elif mode == "deterministic_user_data":
     if include_actions:
         assert False
-    vf_X, vf_r, vf_y, vf_ses, pr_X, pr_r, pr_y, pr_ses, none_X, none_r, none_y, none_ses = get_all_statistics_aug_human()
+    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses,none_as, none_states = get_all_statistics_aug_human()
 
     X_copy = none_X.copy()
     r_copy = none_r.copy()
@@ -757,7 +873,7 @@ elif mode == "deterministic_user_data":
             aX, ay = augment_data(X_copy,y_copy,"arr")
 
             print ("finding reward vector...")
-            rew_vect,all_losses,train_loss,test_loss,training_acc, testing_acc = train(aX, ay, None, None, loss_coef, plot_loss=False)
+            rew_vect,all_losses,train_loss = train(aX, ay, None, None, loss_coef, plot_loss=False)
             print ("performing value iteration...")
             V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA)
 
@@ -781,7 +897,7 @@ elif mode == "deterministic_user_data":
         X_copy, y_copy, X_copy_sytnh, y_copy_synth,_,loss_coef = clean_y(X_copy, r_copy,y_copy,ses_copy)
         aX, ay = augment_data(X_copy,y_copy,"arr")
         print ("finding reward vector...")
-        rew_vect,all_losses,train_loss,test_loss,training_acc, testing_acc = train(aX, ay, None, None, loss_coef, plot_loss=False)
+        rew_vect,all_losses,train_loss = train(aX, ay, None, None, loss_coef, plot_loss=False)
         print ("performing value iteration...")
         V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA)
 
@@ -794,7 +910,7 @@ elif mode == "deterministic_user_data":
 
 elif mode == "sigmoid":
     # vf_X, vf_r, vf_y, vf_ses, vf_as,vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_all_statistics(include_dif_traj_lengths=include_dif_traj_lengths,use_extended_SF=use_extended_SF,GAMMA=GAMMA) #gamma used for labeling
-    vf_X, vf_r, vf_y, vf_ses, pr_X, pr_r, pr_y, pr_ses, none_X, none_r, none_y, none_ses = get_all_statistics_aug_human(include_dif_traj_lengths=include_dif_traj_lengths,GAMMA=GAMMA)
+    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses,none_as, none_states = get_all_statistics_aug_human(include_dif_traj_lengths=include_dif_traj_lengths,GAMMA=GAMMA)
 
     pr_X = none_X
     pr_r = none_r
@@ -850,12 +966,15 @@ elif mode == "sigmoid":
 else:
     vf_X, vf_r, vf_y, vf_ses, vf_as,vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_all_statistics_aug_human(include_dif_traj_lengths=include_dif_traj_lengths,GAMMA=GAMMA) #gamma used for labeling
 
+
     X,synth_max_y,expected_returns = generate_synthetic_prefs(none_X,none_r,none_ses,none_as,none_states,mode)
 
     print ("# of synthetic preferences: " + str(len(X)))
     aX, ay = augment_data(X,synth_max_y,"arr")
 
     print ("finding reward vector...")
+
+
 
     rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False)
     print ("performing value iteration...")

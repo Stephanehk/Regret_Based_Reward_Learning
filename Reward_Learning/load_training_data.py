@@ -316,6 +316,10 @@ def truncate_traj_2(traj,use_extended_SF,GAMMA):
 
 
 def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_traj_lengths=True,GAMMA=0.999):
+    points2picfrom = [(0,0),(0,-1),(0,-2),(0,-4),(1,-1),(2,-2),(3,-3),(4,-4),"positive_terminal_n_non_terminal"]
+    pickpoints = True
+
+
     pr_X = []
     vf_X = []
     none_X = []
@@ -396,6 +400,10 @@ def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_t
                 index = split_name[1]
 
             quad = quad.replace("_formatted_imgs","") #bug from some augmented human data formatting
+
+            if quad not in quad2data:
+                print ("quad not present")
+                continue
             traj_pairs = quad2data[quad].get(pt)
 
 
@@ -404,6 +412,12 @@ def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_t
             pt_ = pt_.split(",")
             x = float(pt_[0])
             y = float(pt_[1])
+            
+
+            if pickpoints:
+                if (x,y) not in points2picfrom and ("positive_terminal_n_non_terminal" in points2picfrom and not(y < 0 and x >30)):
+                    continue
+
 
             poi = traj_pairs[int(index)]
             traj1 = poi[0]
@@ -513,9 +527,10 @@ def get_all_statistics_aug_human(include_dif_traj_lengths=True,GAMMA=0.999):
 
     quad2data2 = {"aug-mul-len":multi_len_data, "aug-t-nt-1":t_nt_1_data, "aug-t-nt-2":t_nt_2_data}
     sample_folder2 = "2021_12_22_data_samples"
+    
 
     vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_worker_pref_data(questions,answers,sample_folder1,quad2data1,include_dif_traj_lengths,GAMMA)
-    print("Non augmenting prefs:", len(vf_X))
+    print("Non augmenting prefs:", len(none_X))
     vf_X2, vf_r2, vf_y2, vf_ses2, vf_as2, vf_states2, pr_X2, pr_r2, pr_y2, pr_ses2, pr_as2, pr_states2, none_X2, none_r2, none_y2, none_ses2, none_as2, none_states2 = get_worker_pref_data(questions_aug,answers_aug,sample_folder2,quad2data2,include_dif_traj_lengths,GAMMA)
 
     # include augmenting data
