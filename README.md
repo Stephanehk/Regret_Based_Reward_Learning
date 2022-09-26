@@ -19,17 +19,17 @@ Running the script ```logistic_reg.py``` will generate the logistic regression r
 #### Results from learning reward functions
 There are several options for learning a reward function for the original delivery domain. Below we list a few:
 
-*Using the regret reward learning model with stochastically generated synthetic preferences:
-  *```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode sigmoid```
-*Using the regret reward learning model with deterministically generated synthetic preferences:
-  *```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic```
-*Using the regret reward learning model with human preferences:
-  *```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic_human_preferences```
-*Using the partial return reward learning model with stochastically generated synthetic preferences:
-  *```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode sigmoid```
-*Using the partial return reward learning model with deterministically generated synthetic preferences:
-  *```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode deterministic```
-*Using the partial return reward learning model with human preferences:
-  *```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode deterministic_human_preferences```
+* Using the regret reward learning model with stochastically generated synthetic preferences:
+  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode sigmoid```
+* Using the regret reward learning model with deterministically generated synthetic preferences:
+  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic```
+* Using the regret reward learning model with human preferences:
+  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic_human_preferences```
+* Using the partial return reward learning model with stochastically generated synthetic preferences:
+  * ```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode sigmoid```
+* Using the partial return reward learning model with deterministically generated synthetic preferences:
+  * ```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode deterministic```
+* Using the partial return reward learning model with human preferences:
+  * ```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode deterministic_human_preferences```
 
 To run the reward learning expirements on a set of randomly generated MDPs, specify the flag ```--use_random_mdps```. Note that you will have to generate these random MDPs by running the script ```generate_random_mdp.py```. A complete list of all the arguments for reward learning can be found by running ```python3 reward_learning.py -h```
