@@ -20,11 +20,11 @@ Running the script ```logistic_reg.py``` will generate the logistic regression r
 There are several options for learning a reward function for the original delivery domain. Below we list a few:
 
 * Using the regret reward learning model with stochastically generated synthetic preferences:
-  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode sigmoid```
+  * ```python3 reward_learning.py --preference_assum regret --preference_model regret --N_ITERS 5000 --LR 2 --mode sigmoid```
 * Using the regret reward learning model with deterministically generated synthetic preferences:
-  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic```
+  * ```python3 reward_learning.py --preference_assum regret --preference_model regret --N_ITERS 5000 --LR 2 --mode deterministic```
 * Using the regret reward learning model with human preferences:
-  * ```python3 reward_learning.py --preference_assum er --preference_model er --N_ITERS 5000 --LR 2 --mode deterministic_human_preferences```
+  * ```python3 reward_learning.py --preference_assum regret --preference_model regret --N_ITERS 5000 --LR 2 --mode deterministic_human_preferences```
 * Using the partial return reward learning model with stochastically generated synthetic preferences:
   * ```python3 reward_learning.py --preference_assum pr --preference_model pr --N_ITERS 30000 --LR 0.5 --mode sigmoid```
 * Using the partial return reward learning model with deterministically generated synthetic preferences:
