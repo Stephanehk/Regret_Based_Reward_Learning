@@ -55,16 +55,9 @@ n_prob_iters = args.n_prob_iters
 GAMMA=args.GAMMA
 include_dif_seg_lengths = args.include_dif_seg_lengths
 
-#mode = "deterministic_user_data"
-#mode = "user_data"
-# mode = "sigmoid" 
 mode = args.mode
-# gt_V,_ = value_iteration(GAMMA=0.999)
 LR = args.LR
 N_ITERS = args.N_ITERS
-# optimizer_add = "line_search"
-# optimizer_add = "mini_batch"
-# optimizer_add = "cyclic"
 optimizer_add = "none"
 
 use_random_MDPs = args.use_random_MDPs
@@ -129,13 +122,7 @@ def clean_y(X,R,Y,sess):
             formatted_y.append(np.array(y))
             out_X.append(x)
 
-    # loss_coef = (len(out_X)/n_unique_trajs)/n_prob_samples
-    # loss_coef = min(1,loss_coef)
-    # if mode == "deterministic_user_data":
-    #     assert loss_coef == 1
     loss_coef = 1
-
-    # print ("loss coef: " + str(loss_coef))
     return out_X,formatted_y,synth_out_X,synth_formatted_y,synth_y_dist, loss_coef
 
 
@@ -585,13 +572,8 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
     if plot_loss:
         fig2, ax2 = plt.subplots()
         ax2.plot(losses,color = "b")
-        # ax2.plot(train_accuracies,color = "r")
-        # ax2.plot(test_accuracies, color = "g")
         plt.plot([0,len(losses)], [min(losses), min(losses)], marker = 'o',color = "black")
         plt.show()
-    #
-    # print ("best_weights: " + str(best_weights))
-    # print ("best_loss: " + str(best_total_loss))
 
     if preference_assum == "regret":
         for param in model.parameters():
@@ -631,8 +613,6 @@ if use_random_MDPs_n_length_segs:
     all_scaled_returns =  {3:[],6:[],9:[],12:[],15:[]}
     num_prefs = 3000
     for trial in range(400,430):
-        # all_trajs = None
-        
         all_states = None
         all_actions = None
 
@@ -646,14 +626,9 @@ if use_random_MDPs_n_length_segs:
         succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy")
         succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy")
 
-        # # succ_feats, succ_q_feats = remove_gt_succ_feat(succ_feats,succ_q_feats, gt_rew_vec)
-        # np.save("random_MDPs/MDP_" + str(trial) +"succ_feats.npy", succ_feats)
-        # np.save("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy", succ_q_feats)
         with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
             env = pickle.load(rf)
 
-        # print (env.board)
-        # print ("============")
         seg_lengths = [3,6,9,12,15]
         for i in range(len(seg_lengths)):
             print ("=============== TRAJ LENGTH: " + str(seg_lengths[i]) + " ===============")
@@ -717,17 +692,14 @@ if use_random_MDPs_n_length_segs:
             if (scaled_return >= 0):
                 num_above_random[seg_lengths[i]] +=1
 
-            # assert False
-
             print ("=================================================================================\n")
 
         np.save("multi_length_segs_res/400_430_num_prefs="+str(num_prefs)+"main_avg_return_" + str(mode) + "_" + str(preference_model) + "_" + str(preference_assum) + str(use_extended_SF) + "_" +  str(GAMMA) + ".npy",all_scaled_returns)
-        # print ("% of MDPs where near optimal performance was achieved: " + str(100*(num_near_opt/100)) + "%")
-        # print ("% of MDPs where better than random performance was achieved: " + str(100*(num_above_random/100)) + "%")
-        for traj_length in traj_lengths:
-            print ("=============== TRAJ LENGTH: " + str(traj_length) + " ===============")
-            print ("% of MDPs where near optimal performance was achieved: " + str(100*(num_near_opt[traj_length]/30)) + "%")
-            print ("% of MDPs where better than random performance was achieved: " + str(100*(num_above_random[traj_length]/30)) + "%")
+     
+        for seg_length in seg_lengths:
+            print ("=============== TRAJ LENGTH: " + str(seg_length) + " ===============")
+            print ("% of MDPs where near optimal performance was achieved: " + str(100*(num_near_opt[seg_length]/30)) + "%")
+            print ("% of MDPs where better than random performance was achieved: " + str(100*(num_above_random[seg_length]/30)) + "%")
 
 elif use_random_MDPs:
     all_num_prefs = [3000]
@@ -741,24 +713,14 @@ elif use_random_MDPs:
     all_avg_returns =[]
     all_scaled_returns = []
     n_runs = 0
-    # np.random.seed(0)
 
     for num_prefs in all_num_prefs:
         print ("============== NUM PREFS: " + str(num_prefs) + " ==============")
-        #num_near_opt = 0
-        #num_above_random = 0
-        #all_avg_returns = []
-        #all_scaled_returns = []
-        # for trial in range(100,130):
         
         for trial in range(0,30):
             np.random.seed(n_runs)
             n_runs+=1
-            # all_trajs = None
-            # all_X = np.load("random_MDPs/MDP_" + str(trial) +"all_X.npy").tolist()
-            # all_r = np.load("random_MDPs/MDP_" + str(trial) +"all_r.npy")
-            # all_states = np.load("random_MDPs/MDP_" + str(trial) + "all_states.npy")
-            # all_actions = np.load("random_MDPs/MDP_" + str(trial) + "all_actions.npy")
+        
             all_states = None
             all_actions = None
             all_trajs = np.load("random_MDPs/MDP_" + str(trial) +"all_trajs.npy",mmap_mode="r").tolist()
@@ -812,21 +774,7 @@ elif use_random_MDPs:
                     all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
                     all_X.append([phi1, phi2])
 
-            # for x,traj_pair,r in zip(all_X, all_trajs, all_r):
-            #     print ("Traj pair: " + str(traj_pair))
-            #     print ("Reward pair: " + str(r))
-            #     print ("SF 1: " + str(x[0]))
-            #     print ("SF 2: " + str(x[1]))
-            #     print ("\n")
-
-            # print ("================================")
-            # print (env.board)
-            # print ("================================")
-
-            # assert False
-            
         
-
             pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
             
         
@@ -834,7 +782,6 @@ elif use_random_MDPs:
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
             
             rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
-            # np.save("random_MDPs/200_210_trial="+str(trial)+"num_prefs="+str(num_prefs)+"main_avg_return_" + str(mode) + "_" + str(preference_model) + "_" + str(preference_assum) + str(use_extended_SF) + "_" +  str(GAMMA) + ".npy",rew_vect)
             
             if not run_temp_exp:
                 np.save("discount_exp_res/0-30_trial=" + str(trial) + "_" + preference_model + "_" + preference_assum + "_rew_vec", rew_vect)
@@ -894,16 +841,6 @@ elif mode == "deterministic_user_data":
     r_copy = none_r.copy()
     y_copy = none_y.copy()
     ses_copy = none_ses.copy()
-
-    # X_copy = pr_X.copy()
-    # r_copy = pr_r.copy()
-    # y_copy = pr_y.copy()
-    # ses_copy = pr_ses.copy()
-
-    # X_copy = vf_X.copy()
-    # r_copy = vf_r.copy()
-    # y_copy = vf_y.copy()
-    # ses_copy = vf_ses.copy()
 
     if partition_human_data:
         combined = list(zip(X_copy, r_copy, y_copy, ses_copy))
@@ -979,7 +916,6 @@ elif mode == "sigmoid":
     for prob_iter in range(n_prob_iters):
         pr_X,synth_max_y,_ = generate_synthetic_prefs(pr_X_copy,pr_r_copy,pr_ses,pr_as_copy,pr_states_copy,mode)
         
-        # aX, ay = augment_data(pr_X,pr_y,"scalar")
         aX, ay = augment_data(pr_X,synth_max_y,"arr")
 
         print ("==========================Trial " + str(prob_iter)+" ==========================")
@@ -1024,8 +960,6 @@ else:
     aX, ay = augment_data(X,synth_max_y,"arr")
 
     print ("finding reward vector...")
-
-
 
     rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False)
     print ("performing value iteration...")
