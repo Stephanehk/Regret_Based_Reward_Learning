@@ -2,7 +2,7 @@
 This is the official implementation for the paper [Models of human preference for learning reward functions](https://arxiv.org/pdf/2206.02231.pdf).
 
 ### MTURK UI
-This folder contains the scripts necessary to run out MTURK human expirements. All assets, included the segments shown to users, are included. You will need to add your MTURK credentials to ```startMTurk.py```. To run the expirement, start the MTURK HIT using startMTurk.py and the web socket by running ```workerHandlerSocket.py```. A video showing the full experimental protocol can be seen [here](https://www.youtube.com/watch?v=zpIkVAHRm1Y).
+This folder contains the scripts necessary to run our MTURK human expirements. All assets, included the segments shown to users, are included. You will need to add your MTURK credentials to ```startMTurk.py```. To run the expirement, start the MTURK HIT using startMTurk.py and the web socket by running ```workerHandlerSocket.py```. A video showing the full experimental protocol can be seen [here](https://www.youtube.com/watch?v=zpIkVAHRm1Y).
 
 ### Segment Selection
 This folder contains various board configurations used during the MTURK expirements, as well as the script ```generate_segment_pairs.py``` which finds all segments in our segment space for a given board confiugarion, and organizes them into categories from the first stage of data collection (see appendix D.3).
