@@ -17,6 +17,9 @@ gt_succ_feat,_, gt_q_succ_feat = learn_successor_feature_iter(pi,0.999,rew_vec =
 
 
 def get_random_reward_vector(gt_rew_vec):
+    '''
+    Compute random reward vector
+    '''
     if gt_rew_vec is None:
         space = [-1,50,-50,1,-1,-2]
     else:
@@ -29,6 +32,9 @@ def get_random_reward_vector(gt_rew_vec):
     return np.array(vector)
 
 def generate_random_policy(GAMMA,env=None,gt_rew_vec=None):
+    '''
+    Generate a policy for a random reward vector
+    '''
     vec = get_random_reward_vector(gt_rew_vec)
     # vec = np.array([-1,50,-50,1,-1,-2])
     V,Qs = value_iteration(rew_vec = vec,GAMMA=GAMMA,env=env)
@@ -43,6 +49,9 @@ def is_arr_in_list(myarr, list_arrays):
     return next((True for elem in list_arrays if np.array_equal(elem, myarr)), False)
 
 def generate_all_policies(n_policies,GAMMA,env=None,gt_rew_vec=None):
+    '''
+    Generate a list of policies from random reward vectors
+    '''
     succ_feats = []
     gt_q_succ_feats = []
     sa_succ_feats = []
@@ -65,7 +74,10 @@ def generate_all_policies(n_policies,GAMMA,env=None,gt_rew_vec=None):
 
 
 def calc_advantage(states,actions,gt_rew_vec=None,env=None):
-    id_ =4
+    '''
+    Calculate advantage under V* and Q*
+    '''
+    id_ =1
     if gt_rew_vec is None or env is None:
         advantage = 0
         for state,action in zip(states,actions):
@@ -94,7 +106,10 @@ def calc_advantage(states,actions,gt_rew_vec=None,env=None):
         return -advantage
 
 def calc_value(state,gt_rew_vec=None,env=None):
-    id_ = 4
+    '''
+    Calculate value under V*
+    '''
+    id_ = 1
     if gt_rew_vec is None or env is None:
         w = [-1,50,-50,1,-1,-2]
         x,y = state

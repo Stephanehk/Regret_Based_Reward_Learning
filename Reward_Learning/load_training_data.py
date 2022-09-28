@@ -315,9 +315,27 @@ def truncate_traj_2(traj,use_extended_SF,GAMMA):
     return pr, phi,[(x,y),(traj_ts_x,traj_ts_y)],traj
 
 
-def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_traj_lengths=True,GAMMA=0.999):
+def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_seg_lengths=True,GAMMA=0.999):
+    '''
+    Input:
+        - questions: a list of the preference pairs shown to humans
+        - answers: a list of human preferences
+        - include_dif_seg_lengths: whether or not to include segments where one terminates earlier than the other
+        - use_extended_SF: whether to use "extended successor features", where there is a feature for each possible (s,a) pair
+        - GAMMA: discount factor
+
+    Output:
+        - For each condition shown to the user (no information shown, partial return info shown, value function info shown), we return the
+            - X: list of features for each preference pair
+            - r: list of partial return for each preference pair
+            - ses: start and end state for each preference pair
+            - as: actions taken for each preference pair
+            - states: states vistied in each preference pair
+    '''
+
+    #choose whether to only include certain points or not
     points2picfrom = [(0,0),(0,-1),(0,-2),(0,-4),(1,-1),(2,-2),(3,-3),(4,-4),"positive_terminal_n_non_terminal"]
-    pickpoints = True
+    pickpoints = False
 
 
     pr_X = []
@@ -471,7 +489,7 @@ def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_t
                 n_incorrect+=1
                 continue
             
-            if not include_dif_traj_lengths:
+            if not include_dif_seg_lengths:
                 if abs(pr1-pr2) >= 30:
                     continue
 
@@ -520,7 +538,10 @@ def get_worker_pref_data(questions,answers,sample_folder,quad2data,include_dif_t
     return vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states
 
 
-def get_all_statistics_aug_human(include_dif_traj_lengths=True,GAMMA=0.999):
+def get_all_statistics_aug_human(include_dif_seg_lengths=True,GAMMA=0.999):
+    '''
+    Collects all human preference data from both stages of data collection
+    '''
     quad2data1 = {"dsdt":dsdt_data,"dsst":dsst_data,"ssst":ssst_data, "sss":sss_data}
     sample_folder1 = "2021_07_29_data_samples"
 
@@ -529,9 +550,9 @@ def get_all_statistics_aug_human(include_dif_traj_lengths=True,GAMMA=0.999):
     sample_folder2 = "2021_12_22_data_samples"
     
 
-    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_worker_pref_data(questions,answers,sample_folder1,quad2data1,include_dif_traj_lengths,GAMMA)
+    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_worker_pref_data(questions,answers,sample_folder1,quad2data1,include_dif_seg_lengths,GAMMA)
     print("Non augmenting prefs:", len(none_X))
-    vf_X2, vf_r2, vf_y2, vf_ses2, vf_as2, vf_states2, pr_X2, pr_r2, pr_y2, pr_ses2, pr_as2, pr_states2, none_X2, none_r2, none_y2, none_ses2, none_as2, none_states2 = get_worker_pref_data(questions_aug,answers_aug,sample_folder2,quad2data2,include_dif_traj_lengths,GAMMA)
+    vf_X2, vf_r2, vf_y2, vf_ses2, vf_as2, vf_states2, pr_X2, pr_r2, pr_y2, pr_ses2, pr_as2, pr_states2, none_X2, none_r2, none_y2, none_ses2, none_as2, none_states2 = get_worker_pref_data(questions_aug,answers_aug,sample_folder2,quad2data2,include_dif_seg_lengths,GAMMA)
 
     # include augmenting data
     vf_X.extend(vf_X2)
@@ -555,7 +576,23 @@ def get_all_statistics_aug_human(include_dif_traj_lengths=True,GAMMA=0.999):
     return vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses,none_as, none_states
 
 
-def get_all_statistics(questions=questions,answers=answers,include_dif_traj_lengths = False,use_extended_SF=False,GAMMA=1):
+def get_all_statistics(questions=questions,answers=answers,include_dif_seg_lengths = False,use_extended_SF=False,GAMMA=1):
+    '''
+    Input:
+        - questions: a list of the preference pairs shown to humans
+        - answers: a list of human preferences
+        - include_dif_seg_lengths: whether or not to include segments where one terminates earlier than the other
+        - use_extended_SF: whether to use "extended successor features", where there is a feature for each possible (s,a) pair
+        - GAMMA: discount factor
+
+    Output:
+        - For each condition shown to the user (no information shown, partial return info shown, value function info shown), we return the
+            - X: list of features for each preference pair
+            - r: list of partial return for each preference pair
+            - ses: start and end state for each preference pair
+            - as: actions taken for each preference pair
+            - states: states vistied in each preference pair
+    '''
     pr_X = []
     vf_X = []
     none_X = []
@@ -728,7 +765,7 @@ def get_all_statistics(questions=questions,answers=answers,include_dif_traj_leng
                     vf_X_terminating.append([phi1,pr1,traj1_ses,traj1,get_action_indices(traj1[1:]), get_traj_states(traj1,len(traj1)-1)])
                     vf_X_terminating.append([phi2,pr2,traj2_ses,traj2,get_action_indices(traj2[1:]), get_traj_states(traj2,len(traj2)-1)])
 
-                    if include_dif_traj_lengths:
+                    if include_dif_seg_lengths:
                         vf_X.append([phi1, os_trunc_traj1_phi])
                         vf_r.append([pr1, os_trunc_traj1_pr])
                         vf_y.append(None)
@@ -780,7 +817,7 @@ def get_all_statistics(questions=questions,answers=answers,include_dif_traj_leng
                     pr_X_terminating.append([phi1, pr1, traj1_ses, traj1,get_action_indices(traj1[1:]), get_traj_states(traj1,len(traj1)-1)])
                     pr_X_terminating.append([phi2, pr2, traj2_ses, traj2,get_action_indices(traj2[1:]), get_traj_states(traj2,len(traj2)-1)])
 
-                    if include_dif_traj_lengths:
+                    if include_dif_seg_lengths:
                         pr_X.append([phi1, os_trunc_traj1_phi])
                         pr_r.append([pr1, os_trunc_traj1_pr])
                         pr_y.append(None)
@@ -833,7 +870,7 @@ def get_all_statistics(questions=questions,answers=answers,include_dif_traj_leng
                     none_X_terminating.append([phi1, pr1, traj1_ses, traj1,get_action_indices(traj1[1:]), get_traj_states(traj1,len(traj1)-1)])
                     none_X_terminating.append([phi2, pr2, traj2_ses, traj2,get_action_indices(traj2[1:]), get_traj_states(traj2,len(traj2)-1)])
 
-                    if include_dif_traj_lengths:
+                    if include_dif_seg_lengths:
                         none_X.append([phi1, os_trunc_traj1_phi])
                         none_r.append([pr1, os_trunc_traj1_pr])
                         none_y.append(None)

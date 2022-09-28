@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='PyTorch RL trainer')
 
 parser.add_argument('--keep_ties', action='store_true', default=True,
                     help='Keep indifferent preferences in preference dataset')
-parser.add_argument('--include_dif_traj_lengths', action='store_true', default=True,
+parser.add_argument('--include_dif_seg_lengths', action='store_true', default=True,
                     help='Include segment pairs where one segment terminates earlier than the other')
 parser.add_argument('--n_prob_samples', default=1, type=int,
                     help='Number of times a preference label is sampled from each segment pair when using a stochastic preference model')
@@ -38,13 +38,13 @@ parser.add_argument('--N_ITERS', default=5000, type=int,
                     help='Number of training iterations')
 parser.add_argument('--use_random_MDPs',  action='store_true', default=False,
                     help='Run expirements on set of 100 random MDPs instead of on the original delivery domain')
-parser.add_argument('--use_random_MDPs_n_length_trajs',  action='store_true', default=False,
+parser.add_argument('--use_random_MDPs_n_length_segs',  action='store_true', default=False,
                     help='Run expirements on set of 100 random MDPs instead of on the original delivery domain')
 parser.add_argument('--partition_human_data',  action='store_true', default=False,
                     help='Run expirements on partitions of the human preference dataset instead of on the entire dataset')
-parser.add_argument('--preference_model',  type=str, default="er",
+parser.add_argument('--preference_model',  type=str, default="regret",
                     help='preference model for how we generate synthetic preferences (pr for partial return model, er for regret model)')
-parser.add_argument('--preference_assum',  type=str, default="er",
+parser.add_argument('--preference_assum',  type=str, default="regret",
                     help='preference model for how we learn a reward function from preferences (pr for partial return model, er for regret model)')
 args = parser.parse_args()
 
@@ -53,7 +53,7 @@ n_prob_samples = args.n_prob_samples
 n_prob_iters = args.n_prob_iters
 
 GAMMA=args.GAMMA
-include_dif_traj_lengths = args.include_dif_traj_lengths
+include_dif_seg_lengths = args.include_dif_seg_lengths
 
 #mode = "deterministic_user_data"
 #mode = "user_data"
@@ -68,7 +68,7 @@ N_ITERS = args.N_ITERS
 optimizer_add = "none"
 
 use_random_MDPs = args.use_random_MDPs
-use_random_MDPs_n_length_trajs = args.use_random_MDPs_n_length_trajs
+use_random_MDPs_n_length_segs = args.use_random_MDPs_n_length_segs
 
 use_extended_SF = False
 run_temp_exp = False
@@ -81,24 +81,34 @@ preference_assum = args.preference_assum #how we learn prefs
 device = "cpu"
 
 
-if preference_assum == "er" and not use_random_MDPs:
+if preference_assum == "regret" and not use_random_MDPs:
     succ_feats = np.load("succ_feats_no_gt.npy",allow_pickle=True)
     pis = np.load("pis_no_gt.npy",allow_pickle=True)
     succ_q_feats = None
 
 def clean_y(X,R,Y,sess):
+    '''
+    Input:
+        - X: a list of each segment pairs features
+        - R: a list of each segment pairs partial return
+        - Y: a list of human preferences for each segment pairs
+        - sess: a list of the the start and end states for each segment pair
+
+    Output:
+        - the properly formatted segment features and preferences 
+    '''
+
     formatted_y = []
     out_X = []
 
     synth_formatted_y = []
     synth_y_dist = []
     synth_out_X = []
-    n_unique_trajs = 0
 
     for x,r,y,ses in zip(X,R,Y,sess):
         x = [list(x[0]),list(x[1])]
-        #change x to include start end state for each trajectory
-        if preference_assum == "er":
+        #change x to include start end state for each segment
+        if preference_assum == "regret":
             x[0] = list(x[0])
             x[0].extend([ses[0][0][0],ses[0][0][1], ses[0][1][0],ses[0][1][1]])
             x[1] = list(x[1])
@@ -129,7 +139,21 @@ def clean_y(X,R,Y,sess):
     return out_X,formatted_y,synth_out_X,synth_formatted_y,synth_y_dist, loss_coef
 
 
-def get_gt_er (x,r,t1_ss=None,t1_es=None,t2_ss=None,t2_es=None,actions=None,states=None,gt_rew_vec=None,env=None):
+def get_gt_regret (x,r,t1_ss=None,t1_es=None,t2_ss=None,t2_es=None,actions=None,states=None,gt_rew_vec=None,env=None):
+    '''
+    Calculates the ground truth regret for a single segment pairs
+
+    Input:
+        - x: a list of each segment pairs features
+        - r: a list of each segment pairs partial return
+        - t1_ss, t1_es, ...: the start and end state for each segment
+        - actions/states: a list of state action pairs for each segment, only used for stochastic MDPs
+        - gt_rew_vec: the ground truth reward vector, None if using the default delivery domain 
+        - env: the environment, None if using the default delivery domain 
+
+    Output:
+        - ground truth regret for each segment
+    '''
     #calculates gt expected return
     if gt_rew_vec is not None:
         w = gt_rew_vec
@@ -150,37 +174,50 @@ def get_gt_er (x,r,t1_ss=None,t1_es=None,t2_ss=None,t2_es=None,actions=None,stat
     if actions is None and include_actions:
         assert False
     elif actions is not None and include_actions:
-        traj1_actions = actions[0]
-        traj2_actions = actions[1]
+        seg1_actions = actions[0]
+        seg2_actions = actions[1]
 
-        traj1_states = states[0]
-        traj2_states = states[1]
+        seg1_states = states[0]
+        seg2_states = states[1]
 
-        assert tuple(traj1_states[0]) == tuple(t1_ss)
-        assert tuple(traj1_states[-1]) == tuple(t1_es)
-        assert tuple(traj2_states[0]) == tuple(t2_ss)
-        assert tuple(traj2_states[-1]) == tuple(t2_es)
+        assert tuple(seg1_states[0]) == tuple(t1_ss)
+        assert tuple(seg1_states[-1]) == tuple(t1_es)
+        assert tuple(seg2_states[0]) == tuple(t2_ss)
+        assert tuple(seg2_states[-1]) == tuple(t2_es)
 
 
     if include_actions:
-        # print (traj1_states)
-        # print (traj1_actions)
-        # print ("\n")
-        r1_er = calc_advantage(traj1_states,traj1_actions,gt_rew_vec,env)
-        r2_er = calc_advantage(traj2_states,traj2_actions,gt_rew_vec,env)
+        
+        r1_cer = calc_advantage(seg1_states,seg1_actions,gt_rew_vec,env)
+        r2_cer = calc_advantage(seg2_states,seg2_actions,gt_rew_vec,env)
 
     else:
         x = np.array(x)
         # r = np.dot(x[:,0:6],w)
 
-        r1_er = r[0] + calc_value(t1_es,gt_rew_vec,env) - calc_value(t1_ss,gt_rew_vec,env)
-        r2_er = r[1] + calc_value(t2_es,gt_rew_vec,env) - calc_value(t2_ss,gt_rew_vec,env)
-    r1_er = np.round(r1_er,2)
-    r2_er = np.round(r2_er,2)
-    return r1_er, r2_er
+        r1_cer = r[0] + calc_value(t1_es,gt_rew_vec,env) - calc_value(t1_ss,gt_rew_vec,env)
+        r2_cer = r[1] + calc_value(t2_es,gt_rew_vec,env) - calc_value(t2_ss,gt_rew_vec,env)
+    r1_cer = np.round(r1_cer,2)
+    r2_cer = np.round(r2_cer,2)
+    return r1_cer, r2_cer
 
 
 def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-1,50,-50,1,-1,-2],env=None):
+    '''
+    Generates synthetic preferences using the model specified by preference_assum
+
+    Input:
+        - pr_X: a list of each segment pairs features
+        - rewards: a list of each segment pairs partial return
+        - sess: a list of the the start and end states for each segment pair
+        - actions/states: a list of state action pairs for each segment, only used for stochastic MDPs
+        - mode: sigmoid (for stochastic preferences) or deterministic (for error-free preferences)
+        - gt_rew_vec: the ground truth reward vector, None if using the default delivery domain 
+        - env: the environment, None if using the default delivery domain 
+
+    Output:
+        - a list of syntheticallt generated preferences and their corresponding preference pair features
+    '''
     synth_y = []
     non_redundent_pr_X = []
     expected_returns = []
@@ -201,7 +238,7 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
             x_f = [list(x[0][0:6]),list(x[1][0:6])]
             x_orig = [list(x[0]), list(x[1])]
         #change x to include start end state for each trajectory
-        if preference_model == "er" and preference_assum == "er":
+        if preference_model == "regret" and preference_assum == "regret":
             if include_actions:
                 #actions[index],states[index]
                 x[0] = list(x[0])
@@ -228,7 +265,7 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
                 x[1].extend([ses[1][0][0],ses[1][0][1], ses[1][1][0],ses[1][1][1]])
                 x_f = [x[0],x[1]]
                 x_orig = [list(x[0]), list(x[1])]
-        if preference_model == "pr" and preference_assum == "er":
+        if preference_model == "pr" and preference_assum == "regret":
             if include_actions:
                 assert False
                 #actions[index],states[index]
@@ -240,7 +277,7 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
                 x[1].extend([ses[1][0][0],ses[1][0][1], ses[1][1][0],ses[1][1][1]])
                 x_f = [x[0],x[1]]
                 x_orig = [list(x[0]), list(x[1])]
-        if preference_model == "er" and preference_assum == "pr":
+        if preference_model == "regret" and preference_assum == "pr":
             x_f = [list(x[0]),list(x[1])]
             x_orig = [list(x[0]), list(x[1])]
 
@@ -251,20 +288,20 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
         t2_es = [int(ses[1][1][0]), int(ses[1][1][1])]
 
         if mode == "sigmoid":
-            if preference_model == "er":
-                r1_er, r2_er = get_gt_er (x,r,t1_ss,t1_es,t2_ss,t2_es,actions[index],states[index],gt_rew_vec,env)
+            if preference_model == "regret":
+                r1_er, r2_er = get_gt_regret (x,r,t1_ss,t1_es,t2_ss,t2_es,actions[index],states[index],gt_rew_vec,env)
 
             if preference_model == "pr" and not keep_ties and r[1] == r[0]:
                 continue
 
-            if preference_model == "er" and not keep_ties and r1_er == r2_er:
+            if preference_model == "regret" and not keep_ties and r1_er == r2_er:
                 continue
 
             for n_samp in range(n_prob_samples):
                 if preference_model == "pr":
                     r1_prob = sigmoid((r[0]-r[1])/1)
                     r2_prob = sigmoid((r[1]-r[0])/1)
-                elif preference_model == "er":
+                elif preference_model == "regret":
                     r1_prob = sigmoid((r1_er-r2_er)/1)
                     r2_prob = sigmoid((r2_er-r1_er)/1)
                 num = np.random.choice([1,0], p=[r1_prob,r2_prob])
@@ -275,8 +312,8 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
                 synth_y.append(pref)
                 non_redundent_pr_X.append(x_orig)
         else:
-            if preference_model == "er":
-                r1_er, r2_er = get_gt_er (x,r,t1_ss,t1_es,t2_ss,t2_es,actions[index],states[index],gt_rew_vec,env)
+            if preference_model == "regret":
+                r1_er, r2_er = get_gt_regret (x,r,t1_ss,t1_es,t2_ss,t2_es,actions[index],states[index],gt_rew_vec,env)
                 pref = get_pref([r1_er, r2_er])
             else:
                 pref = get_pref(r)
@@ -284,7 +321,7 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
             if pref == [0.5,0.5] and not keep_ties:
                 continue
 
-            if preference_model == "er":
+            if preference_model == "regret":
                 expected_returns.append([r1_er, r2_er])
             synth_y.append(pref)
             non_redundent_pr_X.append(x_orig)
@@ -293,22 +330,20 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
     return non_redundent_pr_X, synth_y,expected_returns
 
 def reward_pred_loss(output, target):
+    '''
+    Calculates cross entropy loss between predicted and ground truth preferences
+    '''
     batch_size = output.size()[0]
     output = torch.squeeze(output)
     output = torch.log(output)
     res = torch.mul(output,target)
     return -torch.sum(res)
 
-def mixed_synth_reward_pred_loss(output, target,loss_coef):
-    batch_size = output.size()[0]
-    output = torch.squeeze(output)
-    output = torch.log(output)
-    res = torch.mul(output,target)
-    return -torch.multiply(torch.sum(res),loss_coef)
-    # return -torch.sum(res)/batch_size
-
 
 class RewardFunctionPR(torch.nn.Module):
+    '''
+    The partial return reward learning model
+    '''
     def __init__(self,GAMMA, n_features=6):
         super(RewardFunctionPR, self).__init__()
         self.n_features = n_features
@@ -323,9 +358,12 @@ class RewardFunctionPR(torch.nn.Module):
         phi_logit = torch.stack([left_pred,right_pred],axis=1)
         return phi_logit
 
-class RewardFunctionER(torch.nn.Module):
+class RewardFunctionRegret(torch.nn.Module):
+    '''
+    The regret reward learning model
+    '''
     def __init__(self,GAMMA,succ_feats,preference_weights, n_features=6,include_actions=False,succ_q_feats=None):
-        super(RewardFunctionER, self).__init__()
+        super(RewardFunctionRegret, self).__init__()
         self.n_features = n_features
         self.GAMMA = GAMMA
         self.succ_feats = torch.tensor(succ_feats,dtype=torch.double).to(device)
@@ -339,7 +377,8 @@ class RewardFunctionER(torch.nn.Module):
         self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False).double()
 
         self.softmax = torch.nn.Softmax(dim=1)
-
+        
+        #optionally set weights for the deterministic regret model
         if preference_weights is not None:
             self.rw = preference_weights[0][0]
             self.v_stw = preference_weights[0][1]
@@ -352,15 +391,10 @@ class RewardFunctionER(torch.nn.Module):
         self.T = 0.001
         self.dummy_mdp = True
 
-        #For debugging
-        # self.smax_w_1 = []
-        # self.smax_w_2 = []
-        # self.softmax_temp = torch.nn.Softmax(dim=0)
-
     def get_qs(self,state,action):
-        # print (self.succ_feats.shape)
-        # print (self.succ_q_feats[:,0,0,0])
-        # print ("\n")
+        '''
+        Approximate Q* using successor feautres
+        '''
         selected_succ_feats =[self.succ_q_feats[:,x,y,a].double() for (x,y),a in zip(state.long(),action.long())]
         selected_succ_feats = torch.stack(selected_succ_feats)
 
@@ -371,6 +405,9 @@ class RewardFunctionER(torch.nn.Module):
         return q_pi_approx
 
     def get_vals(self,cords):
+        '''
+        Approximate V* using successor feautres
+        '''
         selected_succ_feats =[self.succ_feats[:,x,y].double() for x,y in cords.long()]
         selected_succ_feats = torch.stack(selected_succ_feats)
         vs = self.linear1(selected_succ_feats)
@@ -475,6 +512,9 @@ class RewardFunctionER(torch.nn.Module):
 
 
 def run_single_set(model, optimizer, X_train, y_train, loss_coef):
+    '''
+    Runs a single training iteration for the given preference model on a batch of data 
+    '''
     model.train()
     optimizer.zero_grad()
     # Forward pass
@@ -487,7 +527,19 @@ def run_single_set(model, optimizer, X_train, y_train, loss_coef):
     loss /= (batch_size)
     return loss, optimizer, model
 
-def train(aX, ay, saX = None, say = None, loss_coef = None, plot_loss=True,preference_weights=None,gt_rew_vec=None,env=None,trajs=None):
+def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_rew_vec=None,env=None):
+    '''
+    Trains the preference model
+
+    Input:
+        - aX: a list of each preference pairs features
+        - ay: a list of preferences for each segment pair
+        - loss_coef: optional coefficient for loss function (default is 1)
+        - plot_loss: plot loss after training
+        - preference_weights: optional weights for deterministic regret model
+        - gt_rew_vec: the ground truth reward vector, None if using the default delivery domain 
+        - env: the environment, None if using the default delivery domain 
+    '''
     torch.manual_seed(0) #for exact reproducibility
     X_train = format_X(aX)
     y_train = format_y(ay,"arr")
@@ -505,8 +557,8 @@ def train(aX, ay, saX = None, say = None, loss_coef = None, plot_loss=True,prefe
 
     if preference_assum == "pr":
         model = RewardFunctionPR(GAMMA,n_features=n_feats)
-    elif preference_assum == "er":
-        model = RewardFunctionER(GAMMA,succ_feats,preference_weights,include_actions=include_actions,succ_q_feats=succ_q_feats,n_features=n_feats)
+    elif preference_assum == "regret":
+        model = RewardFunctionRegret(GAMMA,succ_feats,preference_weights,include_actions=include_actions,succ_q_feats=succ_q_feats,n_features=n_feats)
 
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
@@ -541,7 +593,7 @@ def train(aX, ay, saX = None, say = None, loss_coef = None, plot_loss=True,prefe
     # print ("best_weights: " + str(best_weights))
     # print ("best_loss: " + str(best_total_loss))
 
-    if preference_assum == "er":
+    if preference_assum == "regret":
         for param in model.parameters():
             param.data = nn.parameter.Parameter(torch.tensor(best_weights).double().to(device))
     train_loss = reward_pred_loss(model(X_train), y_train).detach().cpu().numpy()
@@ -573,7 +625,7 @@ all_avg_returns = []
 # phis = []
 
 
-if use_random_MDPs_n_length_trajs:
+if use_random_MDPs_n_length_segs:
     num_near_opt = {3:0,6:0,9:0,12:0,15:0}
     num_above_random = {3:0,6:0,9:0,12:0,15:0}
     all_scaled_returns =  {3:[],6:[],9:[],12:[],15:[]}
@@ -602,9 +654,9 @@ if use_random_MDPs_n_length_trajs:
 
         # print (env.board)
         # print ("============")
-        traj_lengths = [3,6,9,12,15]
-        for i in range(len(traj_lengths)):
-            print ("=============== TRAJ LENGTH: " + str(traj_lengths[i]) + " ===============")
+        seg_lengths = [3,6,9,12,15]
+        for i in range(len(seg_lengths)):
+            print ("=============== TRAJ LENGTH: " + str(seg_lengths[i]) + " ===============")
             
             all_trajs = all_trajss[i]
             all_ses = all_sess[i]
@@ -621,8 +673,8 @@ if use_random_MDPs_n_length_trajs:
             for i_, traj_pair in enumerate(all_trajs):
                 
                
-                phi_dis1,phi1 = find_reward_features(traj_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=traj_lengths[i])
-                phi_dis2,phi2 = find_reward_features(traj_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=traj_lengths[i])
+                phi_dis1,phi1 = find_reward_features(traj_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=seg_lengths[i])
+                phi_dis2,phi2 = find_reward_features(traj_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=seg_lengths[i])
                 all_r.append([np.dot(gt_rew_vec,phi_dis1[0:6]), np.dot(gt_rew_vec,phi_dis2[0:6])])
                 all_X.append([phi_dis1, phi_dis2])
 
@@ -630,7 +682,7 @@ if use_random_MDPs_n_length_trajs:
 
 
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
-            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env,trajs=all_trajs)
+            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
 
             print ("# of synthetic prefrences: " + str(len(pr_X)))
             print ("Ground truth reward vector: " + str(gt_rew_vec))
@@ -655,15 +707,15 @@ if use_random_MDPs_n_length_trajs:
 
             #scale everything: f(z) = (z-x) / (y-x)
             scaled_return = (avg_return - random_avg_return)/(gt_avg_return - random_avg_return)
-            all_scaled_returns[traj_lengths[i]].append(scaled_return)
+            all_scaled_returns[seg_lengths[i]].append(scaled_return)
 
             print ("scaled return following learned policy: " + str(scaled_return))
 
             random_policy_data.changed_gt_rew_vec = False
             if (scaled_return >= 0.9):
-                num_near_opt[traj_lengths[i]]+=1
+                num_near_opt[seg_lengths[i]]+=1
             if (scaled_return >= 0):
-                num_above_random[traj_lengths[i]] +=1
+                num_above_random[seg_lengths[i]] +=1
 
             # assert False
 
@@ -781,7 +833,7 @@ elif use_random_MDPs:
 
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
             
-            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env,trajs=all_trajs)
+            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
             # np.save("random_MDPs/200_210_trial="+str(trial)+"num_prefs="+str(num_prefs)+"main_avg_return_" + str(mode) + "_" + str(preference_model) + "_" + str(preference_assum) + str(use_extended_SF) + "_" +  str(GAMMA) + ".npy",rew_vect)
             
             if not run_temp_exp:
@@ -873,7 +925,7 @@ elif mode == "deterministic_user_data":
             aX, ay = augment_data(X_copy,y_copy,"arr")
 
             print ("finding reward vector...")
-            rew_vect,all_losses,train_loss = train(aX, ay, None, None, loss_coef, plot_loss=False)
+            rew_vect,all_losses,train_loss = train(aX, ay, loss_coef, plot_loss=False)
             print ("performing value iteration...")
             V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA)
 
@@ -897,7 +949,7 @@ elif mode == "deterministic_user_data":
         X_copy, y_copy, X_copy_sytnh, y_copy_synth,_,loss_coef = clean_y(X_copy, r_copy,y_copy,ses_copy)
         aX, ay = augment_data(X_copy,y_copy,"arr")
         print ("finding reward vector...")
-        rew_vect,all_losses,train_loss = train(aX, ay, None, None, loss_coef, plot_loss=False)
+        rew_vect,all_losses,train_loss = train(aX, ay, loss_coef, plot_loss=False)
         print ("performing value iteration...")
         V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA)
 
@@ -909,8 +961,7 @@ elif mode == "deterministic_user_data":
         print (avg_return)
 
 elif mode == "sigmoid":
-    # vf_X, vf_r, vf_y, vf_ses, vf_as,vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_all_statistics(include_dif_traj_lengths=include_dif_traj_lengths,use_extended_SF=use_extended_SF,GAMMA=GAMMA) #gamma used for labeling
-    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses,none_as, none_states = get_all_statistics_aug_human(include_dif_traj_lengths=include_dif_traj_lengths,GAMMA=GAMMA)
+    vf_X, vf_r, vf_y, vf_ses, vf_as, vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses,none_as, none_states = get_all_statistics_aug_human(include_dif_seg_lengths=include_dif_seg_lengths,GAMMA=GAMMA)
 
     pr_X = none_X
     pr_r = none_r
@@ -961,10 +1012,10 @@ elif mode == "sigmoid":
     disp_mmv(all_train_losses, "Training Loss",None)
     disp_mmv(all_reward_vecs, "Reward Vector",0)
 
-    np.save("all_avg_returns_" + preference_model + "_" + preference_assum + str(keep_ties) + str(include_dif_traj_lengths) + ".npy", all_avg_returns)
+    np.save("all_avg_returns_" + preference_model + "_" + preference_assum + str(keep_ties) + str(include_dif_seg_lengths) + ".npy", all_avg_returns)
 
 else:
-    vf_X, vf_r, vf_y, vf_ses, vf_as,vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_all_statistics_aug_human(include_dif_traj_lengths=include_dif_traj_lengths,GAMMA=GAMMA) #gamma used for labeling
+    vf_X, vf_r, vf_y, vf_ses, vf_as,vf_states, pr_X, pr_r, pr_y, pr_ses, pr_as, pr_states, none_X, none_r, none_y, none_ses, none_as, none_states = get_all_statistics_aug_human(include_dif_seg_lengths=include_dif_seg_lengths,GAMMA=GAMMA) #gamma used for labeling
 
 
     X,synth_max_y,expected_returns = generate_synthetic_prefs(none_X,none_r,none_ses,none_as,none_states,mode)

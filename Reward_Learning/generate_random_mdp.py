@@ -9,6 +9,7 @@ import math
 from grid_world import GridWorldEnv
 from rl_algos import value_iteration
 from generate_random_policies import generate_all_policies, calc_value
+from utils import remove_gt_succ_feat
 
 
 def randomly_place_item_exact(env,id,N,height,width):
@@ -35,6 +36,9 @@ def contains_cords(arr1,arr2):
 
 
 def is_in_gated_area(x,y,board):
+    '''
+    Checks if coordinates are in the brick area
+    '''
     val = board[x][y]
     if  val >= 6:
         return True
@@ -42,6 +46,9 @@ def is_in_gated_area(x,y,board):
         return False
 
 def is_in_blocked_area(x,y,board):
+    '''
+    Checks if coordinates are in a blocked area (ie: a house)
+    '''
     val = board[x][y]
     if val == 2 or val == 8:
         return True
@@ -49,6 +56,9 @@ def is_in_blocked_area(x,y,board):
         return False
 
 def find_end_state(traj,board):
+    '''
+    Returns the end state of the given segment
+    '''
     in_gated =False
     traj_ts_x = traj[0][0]
     traj_ts_y = traj[0][1]
@@ -66,34 +76,31 @@ def find_end_state(traj,board):
 
 
 def get_state_feature(env,x,y):
+    '''
+    Returns the reward feature for the given coordinate
+    '''
     reward_feature = np.zeros(6)
     if env.board[x][y] == 0:
         reward_feature[0] = 1
     elif env.board[x][y] == 1:
         #flag
-        # reward_feature[0] = 1
         reward_feature[1] = 1
     elif env.board[x][y] == 2:
         #house
-        # reward_feature[0] = 1
         pass
     elif env.board[x][y] == 3:
         #sheep
-        # reward_feature[0] = 1
         reward_feature[2] = 1
     elif env.board[x][y] == 4:
         #coin
-        # reward_feature[0] = 1
         reward_feature[0] = 1
         reward_feature[3] = 1
     elif env.board[x][y] == 5:
         #road block
-        # reward_feature[0] = 1
         reward_feature[0] = 1
         reward_feature[4] = 1
     elif env.board[x][y] == 6:
         #mud area
-        # reward_feature[0] = 1
         reward_feature[5] = 1
     elif env.board[x][y] == 7:
         #mud area + flag
@@ -106,18 +113,19 @@ def get_state_feature(env,x,y):
         reward_feature[2] = 1
     elif env.board[x][y] == 10:
         #mud area + coin
-        # reward_feature[0] = 1
         reward_feature[5] = 1
         reward_feature[3] = 1
     elif env.board[x][y] == 11:
         #mud area + roadblock
-        # reward_feature[0] = 1
         reward_feature[5] = 1
         reward_feature[4] = 1
     return reward_feature
 
 
 def find_reward_features(traj,env,traj_length=3):
+    '''
+    Returns the reward features for the given segment
+    '''
     GAMMA=1
     traj_ts_x = traj[0][0]
     traj_ts_y = traj[0][1]
@@ -166,6 +174,9 @@ def find_reward_features(traj,env,traj_length=3):
     return phi_dis,phi
 
 def create_traj_prob(s0_x, s0_y, action_seq,traj_length, env, values):
+    '''
+    Creates a segment with stochastic transitions
+    '''
     traj = [(s0_x,s0_y)]
     states = [(s0_x,s0_y)]
     x,y = (s0_x,s0_y)
@@ -199,6 +210,9 @@ def create_traj_prob(s0_x, s0_y, action_seq,traj_length, env, values):
 
 
 def create_traj(s0_x, s0_y,action_seq,traj_length, board, rewards_function,terminal_states,blocking_cords,values):
+    '''
+    Creates a segment with deterministic transitions
+    '''
     actions = [[-1,0],[1,0],[0,-1],[0,1]]
     #generate trajectory 1
     # t_partial_r_sum = rewards_model[s0_x][s0_y]
@@ -240,7 +254,9 @@ def create_traj(s0_x, s0_y,action_seq,traj_length, board, rewards_function,termi
 
 
 def check_same_policy(prev_Q, curr_Q,env):
-
+    '''
+    Check if two Q functions will induce the same poilcy
+    '''
     for x in range(env.height):
         for y in range(env.width):
             if np.argmax(prev_Q[x][y]) != np.argmax(curr_Q[x][y]):
@@ -250,6 +266,9 @@ def check_same_policy(prev_Q, curr_Q,env):
 
 
 def generate_stoch_MDP(r_win):
+    '''
+    Generate an MDP with stochastic transitions
+    '''
     height = 5
     width = 5
 
@@ -300,7 +319,9 @@ def generate_stoch_MDP(r_win):
     return env, all_X, all_r, all_ses, all_trajs, all_env_boards, all_states, all_actions
 
 def generate_MDP(prob=False,n_length_trajs=False):
-    
+    '''
+    Generate an MDP randomly
+    '''
     
     dimensions_width = [5,6,10]
     dimensions_height = [3,6,10,15]
@@ -460,7 +481,7 @@ def generate_MDP(prob=False,n_length_trajs=False):
         all_rs = []
         all_sess = []
         all_trajss = []
-        for traj_length in [3,6,12,15]:
+        for traj_length in [3,6,9,12,15]:
             all_X, all_r, all_ses, all_trajs,_,_ = subsample_env_n_length_trajs(env,traj_length=traj_length)
             all_Xs.append(all_X)
             all_rs.append(all_r)
@@ -486,6 +507,9 @@ def rand_pairs(n,m):
     return [decode(i) for i in random.sample(range(n*(n-1)//2),m)]
 
 def find_action_index(action):
+    '''
+    Given an action find its unique index
+    '''
     actions = [[-1,0],[1,0],[0,-1],[0,1]]
     i = 0
     for a in actions:
@@ -495,13 +519,18 @@ def find_action_index(action):
     return False
 
 def get_action_indices(actions):
+    '''
+    Given actions find their indices
+    '''
     indices = []
     for action in actions:
         indices.append(find_action_index(action))
     return indices
 
 def get_traj_states(traj,board,traj_length=3):
-
+    '''
+    Returns a list of all states visited in a segment
+    '''
     traj_ts_x = traj[0][0]
     traj_ts_y = traj[0][1]
 
@@ -529,6 +558,9 @@ def get_traj_states(traj,board,traj_length=3):
 
 
 def subsample_env_trajs(env,traj_length):
+    '''
+    Subsampes segments in an MDP, used for MDPs with stochastic transitions where exhaustively finding all segments is infeasible
+    '''
     #6,9,15,21
     if traj_length == 3:
         all_action_seqs = list(itertools.product(env.actions,env.actions,env.actions))
@@ -625,6 +657,9 @@ def subsample_env_trajs(env,traj_length):
 
 
 def subsample_env_n_length_trajs(env,traj_length):
+    '''
+    Subsampes segments of varying length in an MDP, used when we want segments of different lengths and finding all such segments is infeasible
+    '''
     V,Qs = value_iteration(rew_vec = np.array(env.reward_array),GAMMA=0.999,env=env,is_set=True)
     MAX_SAMPLES = 30000
     N_FAILS = 0
@@ -706,6 +741,9 @@ def subsample_env_n_length_trajs(env,traj_length):
 
 
 def get_env_trajs(env,traj_length=3):
+    '''
+    Exhaustively finds all segments of length traj_length in an MDP 
+    '''
     V,Qs = value_iteration(rew_vec = np.array(env.reward_array),GAMMA=0.999,env=env)
     print ("finding start states...")
     start_states = []
@@ -835,6 +873,7 @@ def generate_fig_8_MDP(rew_vec):
     print (len(all_X))
     return env, all_X, all_r, all_ses, all_trajs
 
+
 # GAMMA = 0.999
 # env1, all_X1, all_r1, all_ses1, all_trajs1  = generate_fig_8_MDP([-1,-1,-3,0,0,0])
 # gt_rew_vec = env1.reward_array.copy()
@@ -865,38 +904,58 @@ def generate_fig_8_MDP(rew_vec):
 #     pickle.dump(env2, file)
 
 
-for trial in range(0,30):
-    print ("generating SF for MDP: " + str(trial))
-    gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy")
-    with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
-        env = pickle.load(rf)
-        env.generate_transition_probs()
-        env.set_custom_reward_function(gt_rew_vec)
-    
-    for GAMMA in [0,0.5,0.9,0.99]:
-        print ("    gamma=: " + str(GAMMA))
-        succ_feats,sa_succ_feats, pis, succ_q_feats = generate_all_policies(100,GAMMA,env,gt_rew_vec)
-        np.save("random_MDPs/MDP_" + str(trial) + "succ_feats_gamma=" + str(GAMMA)+ ".npy", succ_feats)
-        np.save("random_MDPs/MDP_" + str(trial) + "succ_q_feats_gamma=" + str(GAMMA)+ ".npy", succ_q_feats)
-        np.save("random_MDPs/MDP_" + str(trial) + "sa_succ_feats_gamma=" + str(GAMMA)+ ".npy", sa_succ_feats)
-
-
-# GAMMA = 0.999
 # for trial in range(0,30):
-#     print ("generating MDP: " + str(trial))
-#     env, all_X, all_r, all_ses,all_trajs = generate_MDP()
-#     gt_rew_vec = env.reward_array.copy()
+#     print ("generating SF for MDP: " + str(trial))
+#     gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy")
+#     with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
+#         env = pickle.load(rf)
+#         env.generate_transition_probs()
+#         env.set_custom_reward_function(gt_rew_vec)
+    
+#     for GAMMA in [0,0.5,0.9,0.99]:
+#         print ("    gamma=: " + str(GAMMA))
 
-#     succ_feats,sa_succ_feats, pis, succ_q_feats = generate_all_policies(100,GAMMA,env,gt_rew_vec)
-#     np.save("random_MDPs/MDP_" + str(trial) + "all_trajs.npy", all_trajs)
-#     # np.save("random_MDPs/MDP_" + str(trial) + "all_env_boards.npy", all_env_boards)
-#     np.save("random_MDPs/MDP_" + str(trial) + "succ_feats.npy", succ_feats)
-#     np.save("random_MDPs/MDP_" + str(trial) + "succ_q_feats.npy", succ_q_feats)
-#     np.save("random_MDPs/MDP_" + str(trial) + "sa_succ_feats.npy", sa_succ_feats)
+#         succ_feats = np.load("random_MDPs/MDP_" + str(trial) + "succ_feats_gamma=" + str(GAMMA)+ ".npy")
+#         succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) + "succ_q_feats_gamma=" + str(GAMMA)+ ".npy")
+#         sa_succ_feats = np.load("random_MDPs/MDP_" + str(trial) + "sa_succ_feats_gamma=" + str(GAMMA)+ ".npy")
 
-#     np.save("random_MDPs/MDP_" + str(trial) + "gt_rew_vec.npy", gt_rew_vec)
-#     np.save("random_MDPs/MDP_" + str(trial) + "all_X.npy", all_X)
-#     np.save("random_MDPs/MDP_" + str(trial) + "all_r.npy", all_r)
-#     np.save("random_MDPs/MDP_" + str(trial) + "all_ses.npy", all_ses)
-#     with open(f'random_MDPs/MDP_' + str(trial) + 'env.pickle', 'wb') as file:
-#         pickle.dump(env, file)
+#         succ_feats,succ_q_feats,sa_succ_feats = remove_gt_succ_feat(succ_feats,succ_q_feats,sa_succ_feats,gt_rew_vec,GAMMA)
+     
+#         # succ_feats,sa_succ_feats, pis, succ_q_feats = generate_all_policies(100,GAMMA,env,gt_rew_vec)
+#         np.save("random_MDPs/MDP_" + str(trial) + "succ_feats_gamma=" + str(GAMMA)+ ".npy", succ_feats)
+#         np.save("random_MDPs/MDP_" + str(trial) + "succ_q_feats_gamma=" + str(GAMMA)+ ".npy", succ_q_feats)
+#         np.save("random_MDPs/MDP_" + str(trial) + "sa_succ_feats_gamma=" + str(GAMMA)+ ".npy", sa_succ_feats)
+
+
+GAMMA = 0.999
+for trial in range(400,500):
+    print ("generating MDP: " + str(trial))
+    env, all_X, all_r, all_ses,all_trajs = generate_MDP(n_length_trajs=True)
+    gt_rew_vec = env.reward_array.copy()
+
+    succ_feats,sa_succ_feats, pis, succ_q_feats = generate_all_policies(100,GAMMA,env,gt_rew_vec)
+    succ_feats,succ_q_feats,sa_succ_feats = remove_gt_succ_feat(succ_feats,succ_q_feats,sa_succ_feats,gt_rew_vec,GAMMA)
+
+
+    #np.savez("random_MDPs/MDP_" + str(trial) + "all_trajss.npy", all_trajss)
+    with open("random_MDPs/MDP_" + str(trial) + "all_trajss.npy",'wb') as f: pickle.dump(all_trajs, f)
+
+    np.save("random_MDPs/MDP_" + str(trial) + "gt_rew_vec.npy", gt_rew_vec)
+    # np.savez("random_MDPs/MDP_" + str(trial) + "all_Xs.npy", all_Xs)
+    with open("random_MDPs/MDP_" + str(trial) + "all_Xs.npy",'wb') as f: pickle.dump(all_X, f)
+
+    # np.savez("random_MDPs/MDP_" + str(trial) + "all_rs.npy", all_rs)
+    with open("random_MDPs/MDP_" + str(trial) + "all_rs.npy",'wb') as f: pickle.dump(all_r, f)
+
+    # np.savez("random_MDPs/MDP_" + str(trial) + "all_sess.npy", all_sess)
+    with open("random_MDPs/MDP_" + str(trial) + "all_sess.npy",'wb') as f: pickle.dump(all_ses, f)
+
+    with open(f'random_MDPs/MDP_' + str(trial) + 'env.pickle', 'wb') as file:
+        pickle.dump(env, file)
+
+    np.save("random_MDPs/MDP_" + str(trial) + "succ_feats.npy", succ_feats)
+    np.save("random_MDPs/MDP_" + str(trial) + "succ_q_feats.npy", succ_q_feats)
+    np.save("random_MDPs/MDP_" + str(trial) + "sa_succ_feats.npy", sa_succ_feats)
+
+    with open(f'random_MDPs/MDP_' + str(trial) + 'env.pickle', 'wb') as file:
+        pickle.dump(env, file)
