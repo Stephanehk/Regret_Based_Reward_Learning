@@ -24,9 +24,11 @@ def find_action_index(actions, action):
     return False
 
 def create_traj(s0_x, s0_y,action_seq,traj_length, board, rewards_function,terminal_states,blocking_cords,oneway_cords,values):
+    '''
+    Create a segment
+    '''
     actions = [[-1,0],[1,0],[0,-1],[0,1]]
-    #generate trajectory 1
-    # t_partial_r_sum = rewards_model[s0_x][s0_y]
+    
     t_partial_r_sum = 0
 
     traj = [(s0_x,s0_y)]
@@ -47,28 +49,23 @@ def create_traj(s0_x, s0_y,action_seq,traj_length, board, rewards_function,termi
 
             traj.append(a)
             a_i = find_action_index(actions,a)
-            # print (((x,y),rewards_function[x][y][a_i]))
             t_partial_r_sum += rewards_function[x][y][a_i]
-            #and not (contains_cords(oneway_cords, [x,y]) and not contains_cords(oneway_cords, [x+a[0],y+a[1]]))
             if (x + a[0] >= 0 and x + a[0] < len(board) and y + a[1] >= 0 and y + a[1] < len(board)) and not contains_cords(blocking_cords,[x + a[0],  y + a[1]]):
                 x = x + a[0]
                 y = y + a[1]
-        # else:
-        #     # print ("end state: " + str(((x,y))))
-        #     traj.append(((x,y),[0,0]))
-
+    
         step_n+=1
     
-    # print ("V(s_0): " + str(values[s0_x][s0_y]))
-    # print ("V(s_t): " + str(values[x][y]) + " at " + str((x,y)))
-    # print ("\n")
+ 
     return traj, t_partial_r_sum, values[x][y],is_terminal
 
 
 def check_case(condition, v_dif, anchor_point, all_dif_val2traj_space, quad):
+    '''
+    Check if given point in the segment space matches one of the conditions we are looking for
+    '''
     eps = 0.4
-    #cases: (x,x), (x,-x),(x,0),
-    # if (condition):
+    s
     if anchor_point in all_dif_val2traj_space:
         temp_quad = all_dif_val2traj_space.get(anchor_point)
         temp_quad.append(quad)
@@ -76,35 +73,13 @@ def check_case(condition, v_dif, anchor_point, all_dif_val2traj_space, quad):
     else:
         all_dif_val2traj_space[anchor_point] = [quad]
 
-    # if (condition):
-    #     if (v_dif >= 0 and v_dif <= anchor_point+eps):
-    #         if anchor_point in all_dif_val2traj_space:
-    #             temp_quad = all_dif_val2traj_space.get(anchor_point)
-    #             temp_quad.append(quad)
-    #             all_dif_val2traj_space[anchor_point] = temp_quad
-    #         else:
-    #             all_dif_val2traj_space[anchor_point] = [quad]
-
-    #         #for interpolated points
-    #         if anchor_point+1 in all_dif_val2traj_space:
-    #             temp_quad = all_dif_val2traj_space.get(anchor_point+1)
-    #             temp_quad.append(quad)
-    #             all_dif_val2traj_space[anchor_point+1] = temp_quad
-    #         else:
-    #             all_dif_val2traj_space[anchor_point+1] = [quad]
-
-    #         if anchor_point+2 in all_dif_val2traj_space:
-    #             temp_quad = all_dif_val2traj_space.get(anchor_point+2)
-    #             temp_quad.append(quad)
-    #             all_dif_val2traj_space[anchor_point+2] = temp_quad
-    #         else:
-    #             all_dif_val2traj_space[anchor_point+2] = [quad]
-
-
     return all_dif_val2traj_space
 
 
 def find_matching_trajs(board_name,traj_length=3,save_all=False):
+    '''
+    Find segments in the segment space that match our desired conditions
+    '''
     #x is the difference of V(s_t) - V(s_0) value
     #y is the difference of partial sums value
     values = np.load("boards/" + str(board_name) + "_values.npy")
@@ -142,7 +117,6 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
                 s0_xs.append(i)
                 s0_ys.append(j)
     
-    # while len (all_seen_start_states) < (len(board)*len(board)) - len(terminal_states) - len(blocking_cords):
     all_action_seq = list(product(actions, repeat = traj_length))
     test_map = {}
 
@@ -150,19 +124,11 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
     for s0_x,s0_y in list(zip(s0_xs,s0_ys)):
         all_seen_start_states.append((s0_x,s0_y))
         
-        # print (len(all_action_seq))
         print ("Number of start states processed: " + str(len (all_seen_start_states)) + "/" + str((len(board)*len(board)) - len(terminal_states) - len(blocking_cords)))
 
         action_seq_index = 0
         for action_seq in all_action_seq:
             traj1, t1_partial_r_sum, v_t1,is_terminal = create_traj(s0_x,s0_y,action_seq,traj_length,board,rewards_function,terminal_states,blocking_cords,oneway_cords,values)
-
-
-            # quad1 = [((2, 8), [-1, 0]), ((1, 8), [0, 1]), ((1, 9), [0, -1]), ((1, 8), [-1, 0])]
-            # quad2 = [((7, 4), [0, 1]), ((7, 5), [1, 0]), ((8, 5), [0, 1]), ((8, 6), [1, 0])]
-
-            # encoded_traj1 = action_seq_index + len(actions)*init_s_index
-            # test_map[encoded_traj1] = traj1
 
             if t1_partial_r_sum == False:
                 continue
@@ -173,20 +139,7 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
             all_traj_data.append(traj_data)
             action_seq_index+=1
         init_s_index+=1
-    #------------------------------------------------------------------------------------------------
-    # for encoded_traj in list(test_map.keys()):
-    #     action_seq_i = int(encoded_traj % len(actions))
-    #     s_0_i = int(encoded_traj / len(actions))
-
-    #     s_0 = (s0_xs[s_0_i], s0_ys[s_0_i])
-    #     action_seq = all_action_seq[action_seq_i]
-    #     arr = [s_0]
-    #     arr.extend(action_seq)
-    #     print (arr)
-    #     assert(arr == test_map.get(encoded_traj))
-    # return
-    #------------------------------------------------------------------------------------------------
-
+   
     #Find matching trajectories
 
     n_trajs = 0
@@ -203,8 +156,6 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
             v_dif2 = traj_data2[2]
             is_terminal2 = traj_data2[3]
 
-
-            #TODO: Make sure this line actually works - Python list comparisons suck
             if traj1 == traj2:
                 continue
 
@@ -214,9 +165,6 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
 
             s0_x1, s0_y1 = traj1[0]
             s0_x2, s0_y2 = traj2[0]
-
-            # if (s0_x1, s0_y1) == (s0_x2, s0_y2):
-            #     if ()
 
 
             if (s0_x1, s0_y1) == (s0_x2, s0_y2):
@@ -230,12 +178,6 @@ def find_matching_trajs(board_name,traj_length=3,save_all=False):
                 all_ys_dif_s0.append(partial_sum_dif)
                 all_seen_points_dif_s0.append((v_dif, partial_sum_dif))
 
-            # if (v_dif, partial_sum_dif) not in all_seen_points:
-            #     all_xs.append(v_dif)
-            #     all_ys.append(partial_sum_dif)
-            #     all_seen_points.append((v_dif, partial_sum_dif))
-
-            # print ("\n")
             if int(np.round(v_dif)) == 0:
                 anchor_point = abs(partial_sum_dif)
             else:
@@ -310,6 +252,9 @@ def plot_arrs(xs,ys,name):
     plt.savefig('figures/' + name)
 
 def find_passing_spaces(traj_dump, save_all = False):
+    '''
+    Find segments in the segment space that match our desired conditions
+    '''
     print ("finding passing spaces....")
     passing_spaces = []
     ql_passing_spaces = {}
@@ -397,8 +342,7 @@ def find_passing_spaces(traj_dump, save_all = False):
                 all_ys.append(y_val)
                 all_seen_points.append((x_val_, y_val))
 
-            #TODO: PROBLEM!! WE DO NOT TAKE INTO ACCOUNT WALLS, BOARD EDGES, ETC HERE
-            #Note: this is not a big deal because this only affects a very small number of points but we should fix it at some point
+            
             traj1_ts_x = traj1[0][0] + traj1[1][0] + traj1[2][0] + traj1[3][0] 
             traj1_ts_y = traj1[0][1] + traj1[1][1] + traj1[2][1] + traj1[3][1] 
 
@@ -773,26 +717,6 @@ def find_passing_spaces(traj_dump, save_all = False):
     plot_arrs(xs_dif_s0_same_t,ys_dif_s0_same_t,"all_pts_dsst")
     plot_arrs(xs_dif_s0_dif_t,ys_dif_s0_dif_t,"all_pts_dsdt")
     plot_arrs(xs_same_s0,ys_same_s0,"all_pts_sss")
-
-
-
-    # process_passing_spaces(passing_spaces)
-    # process_ql_passing_spaces(ql_passing_spaces)
-    # xs_same_s0 = []
-    # ys_same_s0 = []
-    # all_points_same_s0 = []
-
-    # xs_same_s0_same_t = []
-    # ys_same_s0_same_t = []
-    # all_points_same_s0_same_t = []
-
-    # xs_dif_s0_same_t = []
-    # ys_dif_s0_same_t = []
-    # all_points_dif_s0_same_t = []
-
-    # xs_dif_s0_dif_t = []
-    # ys_dif_s0_dif_t = []
-    # all_points_dif_s0_dif_t = []
 
 
 def process_passing_spaces(passing_spaces):
