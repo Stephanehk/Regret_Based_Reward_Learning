@@ -65,7 +65,7 @@ def check_case(condition, v_dif, anchor_point, all_dif_val2traj_space, quad):
     Check if given point in the segment space matches one of the conditions we are looking for
     '''
     eps = 0.4
-    s
+    
     if anchor_point in all_dif_val2traj_space:
         temp_quad = all_dif_val2traj_space.get(anchor_point)
         temp_quad.append(quad)
