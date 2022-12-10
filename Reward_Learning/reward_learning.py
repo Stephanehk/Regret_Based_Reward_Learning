@@ -70,8 +70,8 @@ partition_human_data = args.partition_human_data
 preference_model = args.preference_model #how we generate prefs
 preference_assum = args.preference_assum #how we learn prefs
 
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = "cpu"
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = "cpu"
 
 
 if preference_assum == "regret" and not use_random_MDPs:
@@ -224,7 +224,7 @@ def generate_synthetic_prefs(pr_X,rewards,sess,actions,states,mode,gt_rew_vec=[-
         if preference_model == "pr" and preference_assum == "pr":
             x_f = [list(x[0][0:6]),list(x[1][0:6])]
             x_orig = [list(x[0]), list(x[1])]
-        #change x to include start end state for each trajectory
+        #change x to include start end state for each segectory
         if preference_model == "regret" and preference_assum == "regret":
             if include_actions:
                 #actions[index],states[index]
@@ -376,7 +376,6 @@ class RewardFunctionRegret(torch.nn.Module):
             self.v_s0w = 1
 
         self.T = 0.001
-        self.dummy_mdp = True
 
     def get_qs(self,state,action):
         '''
@@ -591,6 +590,8 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
     print ("Learned reward weights:")
     print (reward_vector)
 
+    del model
+
     return reward_vector,losses,train_loss
 
 
@@ -603,7 +604,7 @@ all_testing_acc = []
 all_total_training_losses = []
 all_avg_returns = []
 #
-# trajpairs = []
+# segpairs = []
 # phis = []
 
 
@@ -616,8 +617,8 @@ if use_random_MDPs_n_length_segs:
         all_states = None
         all_actions = None
 
-        with open("random_MDPs/MDP_" + str(trial) +"all_trajss.npy","rb") as f:
-            all_trajss = pickle.load(f)
+        with open("random_MDPs/MDP_" + str(trial) +"all_segss.npy","rb") as f:
+            all_segss = pickle.load(f)
         with open("random_MDPs/MDP_" + str(trial) +"all_sess.npy","rb") as f:
             all_sess = pickle.load(f)
 
@@ -633,23 +634,23 @@ if use_random_MDPs_n_length_segs:
         for i in range(len(seg_lengths)):
             print ("=============== TRAJ LENGTH: " + str(seg_lengths[i]) + " ===============")
             
-            all_trajs = all_trajss[i]
+            all_segs = all_segss[i]
             all_ses = all_sess[i]
-            if len(all_trajs)>num_prefs:
+            if len(all_segs)>num_prefs:
                 np.random.seed(0)
                 print ("SUBSAMPLING TRAJ PAIRS")
-                idx = np.random.choice(np.arange(len(all_trajs)), num_prefs, replace=False)
-                all_trajs = np.array(all_trajs)[idx]
+                idx = np.random.choice(np.arange(len(all_segs)), num_prefs, replace=False)
+                all_segs = np.array(all_segs)[idx]
                 all_ses = np.array(all_ses)[idx]
 
            
             all_X = []
             all_r = [] 
-            for i_, traj_pair in enumerate(all_trajs):
+            for i_, seg_pair in enumerate(all_segs):
                 
                
-                phi_dis1,phi1 = find_reward_features(traj_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=seg_lengths[i])
-                phi_dis2,phi2 = find_reward_features(traj_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,traj_length=seg_lengths[i])
+                phi_dis1,phi1 = find_reward_features(seg_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,seg_length=seg_lengths[i])
+                phi_dis2,phi2 = find_reward_features(seg_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,seg_length=seg_lengths[i])
                 all_r.append([np.dot(gt_rew_vec,phi_dis1[0:6]), np.dot(gt_rew_vec,phi_dis2[0:6])])
                 all_X.append([phi_dis1, phi_dis2])
 
@@ -723,7 +724,7 @@ elif use_random_MDPs:
         
             all_states = None
             all_actions = None
-            all_trajs = np.load("random_MDPs/MDP_" + str(trial) +"all_trajs.npy",mmap_mode="r").tolist()
+            all_segs = np.load("random_MDPs/MDP_" + str(trial) +"all_trajs.npy",mmap_mode="r").tolist()
             all_ses = np.load("random_MDPs/MDP_" + str(trial) +"all_ses.npy",mmap_mode="r").tolist()
             gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy",mmap_mode="r")
 
@@ -746,19 +747,19 @@ elif use_random_MDPs:
                     env.set_custom_reward_function(gt_rew_vec)
 
             if trial >307:
-                all_traj_uniq = []
+                all_seg_uniq = []
                 all_ses_uniq = []
-                for traj,ses in zip(all_trajs,all_ses):
+                for seg,ses in zip(all_segs,all_ses):
                     for j in range (5):
-                        all_traj_uniq.append(traj)
+                        all_seg_uniq.append(seg)
                         all_ses_uniq.append(ses)
-                all_trajs = all_traj_uniq 
+                all_segs = all_seg_uniq 
                 all_ses = all_ses_uniq
 
-            if len(all_trajs)>num_prefs and trial < 200:
+            if len(all_segs)>num_prefs and trial < 200:
                 print ("SUBSAMPLING TRAJ PAIRS")
-                idx = np.random.choice(np.arange(len(all_trajs)), num_prefs, replace=False)
-                all_trajs = np.array(all_trajs)[idx]
+                idx = np.random.choice(np.arange(len(all_segs)), num_prefs, replace=False)
+                all_segs = np.array(all_segs)[idx]
                 all_ses = np.array(all_ses)[idx]
 
             #only recalculate these for non-prob gridworlds
@@ -768,9 +769,9 @@ elif use_random_MDPs:
 
                 # print (env.board)
                 #TODO: CANNOT USE THIS find_reward_features METHOD WITH STOCHASTIC TRANSITIONS
-                for i_, traj_pair in enumerate(all_trajs):
-                    phi_dis1,phi1 = find_reward_features(traj_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
-                    phi_dis2,phi2 = find_reward_features(traj_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
+                for i_, seg_pair in enumerate(all_segs):
+                    phi_dis1,phi1 = find_reward_features(seg_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
+                    phi_dis2,phi2 = find_reward_features(seg_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
                     all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
                     all_X.append([phi1, phi2])
 
@@ -821,7 +822,7 @@ elif use_random_MDPs:
                 num_above_random+=1
 
             # assert False
-            del all_trajs
+            del all_segs
             del all_ses
             del gt_rew_vec
             del succ_feats
