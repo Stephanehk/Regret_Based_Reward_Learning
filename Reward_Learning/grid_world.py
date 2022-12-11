@@ -8,10 +8,14 @@ class GridWorldEnv:
 
 
         self.prev_reward_function = None
-        self.action_space = 4
-        self.feature_size = 6
-        self.reward_array =[-1,50,-50,1,-1,-2]
 
+        #Number of actions. We allow for the 4 cardinal directions.  
+        self.action_space = 4 
+        #Number of reward features. We use one feature for each component of the reward function, [gas, goal, sheep, coin, road block, mud]
+        self.feature_size = 6
+        #The ground truth reward vector, indicating the weights of each reward component.
+        self.reward_array =[-1,50,-50,1,-1,-2]
+        #A list of all possible actions (ie: the 4 cardinal directions)
         self.actions = [[-1,0],[1,0],[0,-1],[0,1]]
 
         self.ss = (0,0)
@@ -43,6 +47,9 @@ class GridWorldEnv:
 
 
     def generate_transition_probs(self):
+        '''
+        This function generates the transition dynamics of the MDP, which by default are deterministic. 
+        '''
         probs = []
         for x in range (len(self.board)):
             width_nexts = []
@@ -55,15 +62,22 @@ class GridWorldEnv:
             probs.append(width_nexts)
         self.transition_probs = probs
 
-    #TODOL should we take transition probs into account when doing get_next_state?
-
 
     def set_start_state(self,ss):
+        '''
+        Sets the start state of the agent in the given MDP.
+
+        Input
+        - ss: a tuple storing the (x,y) coordinates of the desired start state.
+        '''
         self.ss = ss
         self.pos = ss
 
 
     def find_n_starts(self):
+        '''
+        Finds the number of possible start states. This is the set of all non-terminal and non-blocking states. 
+        '''
         self.n_starts = 0
         for x in range (len(self.board)):
             for y in range(len(self.board[0])):
@@ -71,12 +85,19 @@ class GridWorldEnv:
                     self.n_starts+=1
 
     def get_blocking_cords(self):
+        '''
+        Gets a list of blocking states (ie: states that are inaccesible by the agent)
+        '''
         self.blocking_cords = []
         for x in range (len(self.board)):
             for y in range(len(self.board[0])):
                 if self.board[x][y] == 2 or self.board[x][y] == 8:
                     self.blocking_cords.append([x,y])
+
     def get_goal_rand(self):
+        '''
+        Gets a list of goal states. 
+        '''
         self.goals = []
         for x in range (len(self.board)):
             for y in range(len(self.board[0])):
@@ -86,6 +107,9 @@ class GridWorldEnv:
 
 
     def get_terminal_cords(self):
+        '''
+        Gets a list of terminal states. 
+        '''
         self.terminal_cords = []
         for x in range (len(self.board)):
             for y in range(len(self.board[0])):
@@ -100,6 +124,13 @@ class GridWorldEnv:
     #     return N
 
     def set_custom_reward_function(self,reward_arr,set_global=True):
+        '''
+        Changes the ground truth reward function of the MDP.
+
+        Input
+        - reward_arr: a list containing the desired weights for each reward feature.
+        - set_global: if true, sets MDPs reward function using reward_arr. If false, does nothing (useful for testing) 
+        '''
         #[gas, goal, sheep, coin, roadblock, mud]
         reward_function = [[[0 for a in range (len(self.actions))] for x in range (len(self.board[0]))] for y in range(len(self.board))]
         for x in range (len(self.board)):
@@ -165,31 +196,53 @@ class GridWorldEnv:
 
 
     def state2tab(self,x,y):
-        #2,2 = 22
+        '''
+        Given coordinates in the MDP, converts them to a one-hot vector.
+        '''
         N = x + len(self.board[0])*y
         ones = np.zeros(self.observation_space)
         ones[N] = 1
         return ones, N
 
     def is_blocked(self,x,y):
+        '''
+        Determines if the inputted coordinates are in a blocking state or not.
+        '''
         if self.board[x][y] == 2 or self.board[x][y] == 8:
             return True
         else:
             return False
 
     def is_terminal(self,x,y):
+        '''
+        Determines if the inputted coordinates are in a terminal state or not.
+        '''
         if self.board[x][y] == 3 or self.board[x][y] == 1 or self.board[x][y] == 7 or self.board[x][y] == 9:
             return True
         else:
             return False
 
     def is_goal(self,x,y):
+        '''
+        Determines if the inputted coordinates are a goal state or not.
+        '''
         if self.board[x][y] == 1 or self.board[x][y] == 7:
             return True
         else:
             return False
 
     def is_valid_move(self,x,y,a):
+        '''
+        Given a set of coordinates and an action, determines if an action is valid. If an action attempts to move an agent outside the bounds of the board
+        or into a blocking state it is invalid.
+
+        Input:
+        - x,y: the inputted coordinates.
+        - a: the inputted action, represented as the array [x displacement, y displacement]
+
+        Output:
+        - true if the action is valid, false otherwise.
+        '''
         if (x + a[0] >= 0 and x + a[0] < len(self.board) and y + a[1] >= 0 and y + a[1] < len(self.board[0])) and self.board[x + a[0]][y + a[1]] != 2 and self.board[x + a[0]][y + a[1]] != 8:
             return True
         else:
@@ -197,6 +250,17 @@ class GridWorldEnv:
 
 
     def get_reward_feature(self,x,y,prev_x,prev_y):
+        '''
+        Returns the reward features for a given transition.
+
+        Input:
+        - x,y: the inputted coordinates.
+        - prev_x,prev_y: the previous coordinates.
+        
+        Output:
+        - A list of reward features for the given transition. 
+
+        '''
         reward_feature = np.zeros(self.feature_size)
         if self.board[x][y] == 0:
             reward_feature[0] = 1
@@ -254,6 +318,20 @@ class GridWorldEnv:
         return reward_feature
 
     def get_prev_state(self,s,a_index):
+        '''
+        Given a state and the previous action index, returns the previous state info.
+
+        Input:
+        - s: the inputted coordinates represented as the tuple (x,y)
+        - a_index: the previous action index.
+        
+        Output:
+        - prev_state: The previous state represented as the tuple (x,y). None if the previous transition is invalid. 
+        - reward: The previously collected reward. None if the previous transition is invalid.
+        - done: If the previous transition was into a terminal state or not. None if the previous transition is invalid. 
+        - reward_feature: The reward feature for the previous transition. None if the previous transition is invalid.
+
+        '''
         x,y = s
         done = False
         actions = [[-1,0],[1,0],[0,-1],[0,1]]
@@ -282,6 +360,20 @@ class GridWorldEnv:
 
 
     def get_next_state_prob(self,s,a_index):
+        '''
+        Given a state and the previous action index, returns the next state info for an MDP with stochastic transition dynamics.
+
+        Input:
+        - s: the inputted coordinates represented as the tuple (x,y)
+        - a_index: the current action index.
+        
+        Output:
+        - next_state: The next state represented as the tuple (x,y), sampled from the MDP next state distribution.  
+        - reward: The collected reward.
+        - done: If the current transition was into a terminal state or not. 
+        - reward_feature: The reward feature for the current transition.
+
+        '''
 
         x,y = s
         prev_x,prev_y = s
@@ -309,6 +401,20 @@ class GridWorldEnv:
         return next_state, reward, done, list(phi)
 
     def get_next_state(self,s,a_index):
+        '''
+        Given a state and the previous action index, returns the next state info for an MDP with deterministic transition dynamics.
+
+        Input:
+        - s: the inputted coordinates represented as the tuple (x,y).
+        - a_index: the current action index.
+        
+        Output:
+        - next_state: The next state represented as the tuple (x,y).
+        - reward: The collected reward.
+        - done: If the current transition was into a terminal state or not. 
+        - reward_feature: The reward feature for the current transition.
+
+        '''
 
         x,y = s
         prev_x,prev_y = s
@@ -339,16 +445,45 @@ class GridWorldEnv:
         return next_state, reward, done, reward_feature
 
     def step(self,a_index):
+        '''
+        Given an action index, returns the next state info and stores next state as a class variable. This is for deterministic transitions.
+
+        Input:
+        - a_index: the current action index.
+        
+        Output:
+        - next_state: The next state represented as the tuple (x,y).
+        - reward: The collected reward.
+        - done: If the current transition was into a terminal state or not. 
+        - reward_feature: The reward feature for the current transition.
+
+        '''
         next_state, reward, done, reward_feature = self.get_next_state(self.pos, a_index)
         self.pos = next_state
         return next_state, reward, done, reward_feature
 
     def step_prob(self,a_index):
+        '''
+        Given an action index, returns the next state info and stores next state as a class variable. This is for stochastic transitions.
+
+        Input:
+        - a_index: the current action index.
+        
+        Output:
+        - next_state: The next state represented as the tuple (x,y), sampled from the next state distribution.
+        - reward: The collected reward.
+        - done: If the current transition was into a terminal state or not. 
+        - reward_feature: The reward feature for the current transition.
+
+        '''
         next_state, reward, done, reward_feature = self.get_next_state_prob(self.pos, a_index)
         self.pos = next_state
         return next_state, reward, done, reward_feature
 
     def reset(self):
+        '''
+        Resets all class variables. This should be called at the end of every episode. 
+        '''
 
         x = random.randrange(0,self.height)
         y = random.randrange(0,self.width)
@@ -361,6 +496,16 @@ class GridWorldEnv:
         return self.pos
 
     def find_action_index(self, action):
+        '''
+        Finds the index of an action represented as an array.
+
+        Input:
+        - The specified action, represented as the array [x displacement, y displacement]
+
+        Output:
+        - The action index, or false if the action does not exist. 
+        '''
+
         actions = [[-1,0],[1,0],[0,-1],[0,1]]
         i = 0
         for a in actions:
