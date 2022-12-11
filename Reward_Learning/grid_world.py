@@ -5,6 +5,9 @@ import random
 
 class GridWorldEnv:
     def __init__(self,board_name, height=10, width=10):
+        '''
+        Creates a GridWorld object with the specified parameters. If board_name is not None, then a specific board configuration is loaded from disk.
+        '''
 
 
         self.prev_reward_function = None
