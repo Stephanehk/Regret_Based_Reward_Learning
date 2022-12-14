@@ -29,12 +29,12 @@ class RewardFunctionPRGen(torch.nn.Module):
         self.GAMMA = GAMMA
 
         #input is (x,y,action_index)
-        self.linear1 = torch.nn.Linear(3, 16)
-        self.linear2 = torch.nn.Linear(16, 1)
-        self.relu =  torch.nn.ReLU()
+        self.linear1 = torch.nn.Linear(3, 128)
+        self.linear2 = torch.nn.Linear(128, 1)
+        self.activation =  torch.nn.Tanh()
 
     def forward(self, sa_list):        
-        pr = torch.squeeze(self.linear2(self.relu(self.linear1(sa_list))))
+        pr = torch.squeeze(self.linear2(self.activation(self.linear1(sa_list))))
         pr = torch.sum(pr, dim=2)
 
         left_pred = torch.sigmoid(torch.subtract(pr[:,0:1],pr[:,1:2]))
@@ -43,7 +43,7 @@ class RewardFunctionPRGen(torch.nn.Module):
         return phi_logit
     
     def get_trans_val(self,trans):
-        return torch.squeeze(self.linear2(self.relu(self.linear1(trans))))
+        return torch.squeeze(self.linear2(self.activation(self.linear1(trans))))
 
 
 class RewardFunctionRegret(torch.nn.Module):
