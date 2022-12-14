@@ -1,6 +1,9 @@
 from grid_world import GridWorldEnv
 import random
 import numpy as np
+import torch
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def get_random_reward_vector():
     space = [-1,50,-50,1,-1,-2]
@@ -72,6 +75,25 @@ def learn_successor_feature_iter(pi,FGAMMA,rew_vec=None,env=None):
         if delta < THETA:
             break
     return psi,np.array(psi_actions), psi_Q
+
+
+def build_pi_from_nn_feats(model, env=None):
+    pi = {}
+    if env == None:
+        height = 10
+        width = 10
+    else:
+        height = env.height
+        width = env.width
+    for i in range (height):
+        for j in range (width):
+            with torch.no_grad():
+                greedy_a_i = np.argmax([model.get_trans_val(torch.tensor([i,j,a_i]).to(device).float()).cpu() for a_i in range(4)])
+            
+            pi[(i,j)] = [(1 if a_index == greedy_a_i else 0, a_index) for a_index in range(4)]
+
+    return pi
+
 
 def build_pi_from_feats(s_a_weights,env=None):
     pi = {}

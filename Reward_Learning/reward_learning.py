@@ -11,11 +11,11 @@ import os
 import argparse
 
 from load_training_data import get_all_statistics,get_all_statistics_aug_human
-from rl_algos import value_iteration, get_gt_avg_return,build_pi,build_pi_from_feats,iterative_policy_evaluation,learn_successor_feature_iter,build_random_policy
+from rl_algos import value_iteration, get_gt_avg_return,build_pi,build_pi_from_feats,build_pi_from_nn_feats,iterative_policy_evaluation,learn_successor_feature_iter,build_random_policy
 from generate_random_policies import calc_value, calc_advantage
 import random_policy_data
-from utils import augment_data, find_reward_features, format_X, format_y, sigmoid, get_pref, disp_mmv
-
+from utils import augment_data, find_reward_features, format_X, format_y, sigmoid, get_pref, disp_mmv, get_sa_list
+from models import RewardFunctionPRGen, RewardFunctionRegret, RewardFunctionPR 
 
 
 parser = argparse.ArgumentParser(description='PyTorch RL trainer')
@@ -63,7 +63,8 @@ optimizer_add = "none"
 use_random_MDPs = args.use_random_MDPs
 use_random_MDPs_n_length_segs = args.use_random_MDPs_n_length_segs
 
-use_extended_SF = False
+use_extended_SF = True
+generalize_SF = True
 run_temp_exp = False
 include_actions = False
 partition_human_data = args.partition_human_data
@@ -327,176 +328,6 @@ def reward_pred_loss(output, target):
     return -torch.sum(res)
 
 
-class RewardFunctionPR(torch.nn.Module):
-    '''
-    The partial return reward learning model
-    '''
-    def __init__(self,GAMMA, n_features=6):
-        super(RewardFunctionPR, self).__init__()
-        self.n_features = n_features
-        self.GAMMA = GAMMA
-        self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False)
-
-
-    def forward(self, phi):
-        pr = torch.squeeze(self.linear1(phi))
-        left_pred = torch.sigmoid(torch.subtract(pr[:,0:1],pr[:,1:2]))
-        right_pred = torch.sigmoid(torch.subtract(pr[:,1:2],pr[:,0:1]))
-        phi_logit = torch.stack([left_pred,right_pred],axis=1)
-        return phi_logit
-
-class RewardFunctionRegret(torch.nn.Module):
-    '''
-    The regret reward learning model
-    '''
-    def __init__(self,GAMMA,succ_feats,preference_weights, n_features=6,include_actions=False,succ_q_feats=None):
-        super(RewardFunctionRegret, self).__init__()
-        self.n_features = n_features
-        self.GAMMA = GAMMA
-        self.succ_feats = torch.tensor(succ_feats,dtype=torch.double).to(device)
-
-        if succ_q_feats is not None:
-            self.succ_q_feats = torch.tensor(succ_q_feats,dtype=torch.double).to(device)
-
-        self.include_actions = include_actions
-        # self.succ_feats_gt = torch.tensor(succ_feats_gt,dtype=torch.double)
-        # self.w = torch.nn.Parameter(torch.tensor(np.zeros(n_features).T,dtype = torch.float,requires_grad=True))
-        self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False).double()
-
-        self.softmax = torch.nn.Softmax(dim=1)
-        
-        #optionally set weights for the deterministic regret model
-        if preference_weights is not None:
-            self.rw = preference_weights[0][0]
-            self.v_stw = preference_weights[0][1]
-            self.v_s0w = preference_weights[0][2]
-        else:
-            self.rw = 1
-            self.v_stw = 1
-            self.v_s0w = 1
-
-        self.T = 0.001
-
-    def get_qs(self,state,action):
-        '''
-        Approximate Q* using successor feautres
-        '''
-        selected_succ_feats =[self.succ_q_feats[:,x,y,a].double() for (x,y),a in zip(state.long(),action.long())]
-        selected_succ_feats = torch.stack(selected_succ_feats)
-
-        qs = self.linear1(selected_succ_feats)
-        q_pi_approx = torch.sum(torch.mul(self.softmax(qs/self.T),qs),dim = 1)
-
-        q_pi_approx = torch.squeeze(q_pi_approx)
-        return q_pi_approx
-
-    def get_vals(self,cords):
-        '''
-        Approximate V* using successor feautres
-        '''
-        selected_succ_feats =[self.succ_feats[:,x,y].double() for x,y in cords.long()]
-        selected_succ_feats = torch.stack(selected_succ_feats)
-        vs = self.linear1(selected_succ_feats)
-        v_pi_approx = torch.sum(torch.mul(self.softmax(vs/self.T),vs),dim = 1)
-
-        v_pi_approx = torch.squeeze(v_pi_approx)
-        return v_pi_approx
-
-    def forward(self, phi):
-
-        if self.include_actions:
-            a1 = torch.squeeze(phi[:,:,6:7])
-            a2 = torch.squeeze(phi[:,:,7:8])
-            a3 = torch.squeeze(phi[:,:,8:9])
-
-            s1_x = torch.squeeze(phi[:,:,9:10])
-            s1_y = torch.squeeze(phi[:,:,10:11])
-            s1 = torch.stack([s1_x,s1_y], dim=1)
-
-            s2_x = torch.squeeze(phi[:,:,11:12])
-            s2_y = torch.squeeze(phi[:,:,12:13])
-            s2 = torch.stack([s2_x,s2_y], dim=1)
-
-            s3_x = torch.squeeze(phi[:,:,13:14])
-            s3_y = torch.squeeze(phi[:,:,14:15])
-            s3 = torch.stack([s3_x,s3_y], dim=1)
-
-            q1 = self.get_qs(s1,a1)
-            v1 = self.get_vals(s1)
-            adv1 = torch.subtract(v1,q1)
-            left_adv1 = adv1[:,0:1]
-            right_adv1 = adv1[:,1:2]
-
-            q2 = self.get_qs(s2,a2)
-            v2 = self.get_vals(s2)
-            adv2 = torch.subtract(v2,q2)
-            left_adv2 = adv2[:,0:1]
-            right_adv2 = adv2[:,1:2]
-
-            left_delta_er = torch.add(left_adv1, left_adv2)
-            right_delta_er = torch.add(right_adv1, right_adv2)
-
-
-            q3 = self.get_qs(s3,a3)
-            v3 = self.get_vals(s3)
-            adv3 = torch.subtract(v3,q3)
-            left_adv3 = adv3[:,0:1]
-            right_adv3 = adv3[:,1:2]
-
-            left_delta_er = -torch.add(left_delta_er, left_adv3)
-            right_delta_er = -torch.add(right_delta_er, right_adv3)
-        else:
-            pr = torch.squeeze(self.linear1(phi[:,:,0:self.n_features].double()))
-            ss_x = torch.squeeze(phi[:,:,self.n_features:self.n_features+1])
-            ss_y = torch.squeeze(phi[:,:,self.n_features+1:self.n_features+2])
-            ss_cord_pairs = torch.stack([ss_x,ss_y], dim=1)
-
-
-            es_x = torch.squeeze(phi[:,:,self.n_features+2:self.n_features+3])
-            es_y = torch.squeeze(phi[:,:,self.n_features+3:self.n_features+4])
-            es_cord_pairs = torch.stack([es_x,es_y], dim=1)
-
-
-            #build list of succ fears for start/end states
-            v_ss = self.get_vals(ss_cord_pairs)
-            v_es = self.get_vals(es_cord_pairs)
-
-
-            left_pr = pr[:,0:1]
-            right_pr = pr[:,1:2]
-
-            left_vf_ss = v_ss[:,0:1]
-            right_vf_ss = v_ss[:,1:2]
-
-            left_vf_es = v_es[:,0:1]
-            right_vf_es = v_es[:,1:2]
-
-
-            #apply weights learned from logistic regression (if it exists)
-            left_pr = torch.multiply(left_pr, self.rw)
-            right_pr = torch.multiply(right_pr, self.rw)
-
-            left_vf_ss = torch.multiply(left_vf_ss, self.v_s0w)
-            right_vf_ss = torch.multiply(right_vf_ss, self.v_s0w)
-
-            left_vf_es = torch.multiply(left_vf_es, self.v_stw)
-            right_vf_es = torch.multiply(right_vf_es, self.v_stw)
-
-            #calculate change in expected return
-            left_delta_v = torch.subtract(left_vf_es, left_vf_ss)
-            right_delta_v = torch.subtract(right_vf_es, right_vf_ss)
-
-            left_delta_er = torch.add(left_pr, left_delta_v)
-            right_delta_er = torch.add(right_pr, right_delta_v)
-
-        left_pred = torch.sigmoid(torch.subtract(left_delta_er, right_delta_er))
-        right_pred = torch.sigmoid(torch.subtract(right_delta_er, left_delta_er))
-
-        phi_logit = torch.stack([left_pred,right_pred],axis=1)
-
-        return phi_logit
-
-
 def run_single_set(model, optimizer, X_train, y_train, loss_coef):
     '''
     Runs a single training iteration for the given preference model on a batch of data 
@@ -542,7 +373,10 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
         n_feats = 6
 
     if preference_assum == "pr":
-        model = RewardFunctionPR(GAMMA,n_features=n_feats)
+        if use_extended_SF and generalize_SF:
+            model = RewardFunctionPRGen(GAMMA,n_features=n_feats)
+        else:
+            model = RewardFunctionPR(GAMMA,n_features=n_feats)
     elif preference_assum == "regret":
         model = RewardFunctionRegret(GAMMA,succ_feats,preference_weights,include_actions=include_actions,succ_q_feats=succ_q_feats,n_features=n_feats)
 
@@ -590,7 +424,11 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
     print ("Learned reward weights:")
     print (reward_vector)
 
-    del model
+    if use_extended_SF and generalize_SF:
+        #we want to use the neural network as our reward vector
+        reward_vector = model
+    else:
+        del model
 
     return reward_vector,losses,train_loss
 
@@ -726,7 +564,7 @@ elif use_random_MDPs:
     for num_prefs in all_num_prefs:
         print ("============== NUM PREFS: " + str(num_prefs) + " ==============")
         
-        for trial in range(0,30):
+        for trial in range(100,101):
             np.random.seed(n_runs)
             n_runs+=1
         
@@ -736,22 +574,21 @@ elif use_random_MDPs:
             all_ses = np.load("random_MDPs/MDP_" + str(trial) +"all_ses.npy",mmap_mode="r").tolist()
             gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy",mmap_mode="r")
 
-            if trial < 30 and GAMMA != 0.999 and preference_assum == "regret":
-                #fix small formatting bug
-                succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+            # if trial < 30 and GAMMA != 0.999 and preference_assum == "regret":
+            #     succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
                 
-                if use_extended_SF:
-                    sa_succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"sa_succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
-                    succ_feats = np.concatenate((succ_feats, sa_succ_feats), axis=3)
-                succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
-            else:
-                succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy",mmap_mode="r")
-                succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy",mmap_mode="r")
+            #     if use_extended_SF:
+            #         sa_succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"sa_succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+            #         succ_feats = np.concatenate((succ_feats, sa_succ_feats), axis=3)
+            #     succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
+            # else:
+            succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats.npy",mmap_mode="r")
+            succ_q_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_q_feats.npy",mmap_mode="r")
 
         
             with open("random_MDPs/MDP_" + str(trial) +"env.pickle", 'rb') as rf:
                 env = pickle.load(rf)
-                if trial < 200 or trial > 300:
+                if trial < 300:
                     env.generate_transition_probs()
                     env.set_custom_reward_function(gt_rew_vec)
             
@@ -765,14 +602,14 @@ elif use_random_MDPs:
                 all_segs = all_seg_uniq 
                 all_ses = all_ses_uniq
 
-            if len(all_segs)>num_prefs and trial < 200:
+            if len(all_segs)>num_prefs and trial < 300:
                 print ("SUBSAMPLING TRAJ PAIRS")
                 idx = np.random.choice(np.arange(len(all_segs)), num_prefs, replace=False)
                 all_segs = np.array(all_segs)[idx]
                 all_ses = np.array(all_ses)[idx]
 
             #only recalculate these for non-prob gridworlds
-            if trial < 200 or trial > 300:
+            if trial < 300:
                 all_X = []
                 all_r = []
 
@@ -786,18 +623,21 @@ elif use_random_MDPs:
                         _,phi1_rew = find_reward_features(seg_pair[0],env,use_extended_SF=False,GAMMA=GAMMA)
                         _,phi2_rew = find_reward_features(seg_pair[1],env,use_extended_SF=False,GAMMA=GAMMA)
                         all_r.append([np.dot(gt_rew_vec,phi1_rew[0:6]), np.dot(gt_rew_vec,phi2_rew[0:6])])
+                        if generalize_SF:
+                            sa_list_1 = get_sa_list(seg_pair[0],env)
+                            sa_list_2 = get_sa_list(seg_pair[1],env)
+                            all_X.append([sa_list_1, sa_list_2])
+                        else:
+                            all_X.append([phi1, phi2])
                     else:
                         all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
-                    
-                    all_X.append([phi1, phi2])
+                        all_X.append([phi1, phi2])
 
             pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
-            
-        
 
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
             
-            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
+            rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=True,gt_rew_vec=np.array(gt_rew_vec),env=env)
             
             # print (rew_vect)
             # assert False
@@ -810,7 +650,11 @@ elif use_random_MDPs:
 
             if use_extended_SF:
                 #derive policy from learned (s,a) weights
-                pi = build_pi_from_feats(rew_vect,env=env)
+                if generalize_SF:
+                    pi = build_pi_from_nn_feats(rew_vect,env=env)
+                    del rew_vect
+                else:
+                    pi = build_pi_from_feats(rew_vect,env=env)
             else:
                 #derive policy from learned reward function
                 V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA,env=env)
