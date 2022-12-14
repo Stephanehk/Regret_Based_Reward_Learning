@@ -11,7 +11,7 @@ import os
 import argparse
 
 from load_training_data import get_all_statistics,get_all_statistics_aug_human
-from rl_algos import value_iteration, get_gt_avg_return,build_pi,iterative_policy_evaluation,learn_successor_feature_iter,build_random_policy
+from rl_algos import value_iteration, get_gt_avg_return,build_pi,build_pi_from_feats,iterative_policy_evaluation,learn_successor_feature_iter,build_random_policy
 from generate_random_policies import calc_value, calc_advantage
 import random_policy_data
 from utils import augment_data, find_reward_features, format_X, format_y, sigmoid, get_pref, disp_mmv
@@ -535,9 +535,9 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
 
     if use_extended_SF:
         if env is not None:
-            n_feats = 4*env.width*env.height + 6
+            n_feats = 4*env.width*env.height
         else:
-            n_feats = 406
+            n_feats = 400
     else:
         n_feats = 6
 
@@ -566,13 +566,13 @@ def train(aX, ay, loss_coef = None, plot_loss=True,preference_weights=None,gt_re
   
         loss.backward()
         optimizer.step()
-        losses.append(loss)
+        losses.append(loss.detach().cpu().numpy())
 
     if plot_loss:
         fig2, ax2 = plt.subplots()
         ax2.plot(losses,color = "b")
         plt.plot([0,len(losses)], [min(losses), min(losses)], marker = 'o',color = "black")
-        plt.show()
+        plt.savefig("loss.png")
 
     if preference_assum == "regret":
         for param in model.parameters():
@@ -613,6 +613,7 @@ if use_random_MDPs_n_length_segs:
     num_above_random = {3:0,6:0,9:0,12:0,15:0}
     all_scaled_returns =  {3:[],6:[],9:[],12:[],15:[]}
     num_prefs = 3000
+
     for trial in range(400,430):
         all_states = None
         all_actions = None
@@ -651,7 +652,13 @@ if use_random_MDPs_n_length_segs:
                
                 phi_dis1,phi1 = find_reward_features(seg_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,seg_length=seg_lengths[i])
                 phi_dis2,phi2 = find_reward_features(seg_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA,seg_length=seg_lengths[i])
-                all_r.append([np.dot(gt_rew_vec,phi_dis1[0:6]), np.dot(gt_rew_vec,phi_dis2[0:6])])
+                if use_extended_SF:
+                    _,phi1_rew = find_reward_features(seg_pair[0],env,use_extended_SF=False,GAMMA=GAMMA)
+                    _,phi2_rew = find_reward_features(seg_pair[1],env,use_extended_SF=False,GAMMA=GAMMA)
+                    all_r.append([np.dot(gt_rew_vec,phi1_rew[0:6]), np.dot(gt_rew_vec,phi2_rew[0:6])])
+                else:
+                    all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
+                
                 all_X.append([phi_dis1, phi_dis2])
 
             pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
@@ -659,7 +666,8 @@ if use_random_MDPs_n_length_segs:
 
             aX, ay = augment_data(pr_X,synth_max_y,"arr")
             rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
-
+            
+    
             print ("# of synthetic prefrences: " + str(len(pr_X)))
             print ("Ground truth reward vector: " + str(gt_rew_vec))
             V,Q = value_iteration(rew_vec =rew_vect,GAMMA=0.999,env=env)
@@ -728,7 +736,8 @@ elif use_random_MDPs:
             all_ses = np.load("random_MDPs/MDP_" + str(trial) +"all_ses.npy",mmap_mode="r").tolist()
             gt_rew_vec = np.load("random_MDPs/MDP_" + str(trial) +"gt_rew_vec.npy",mmap_mode="r")
 
-            if trial < 30 and GAMMA != 0.999:
+            if trial < 30 and GAMMA != 0.999 and preference_assum == "regret":
+                #fix small formatting bug
                 succ_feats = np.load("random_MDPs/MDP_" + str(trial) +"succ_feats_gamma="+str(GAMMA)+".npy",mmap_mode="r")
                 
                 if use_extended_SF:
@@ -745,7 +754,7 @@ elif use_random_MDPs:
                 if trial < 200 or trial > 300:
                     env.generate_transition_probs()
                     env.set_custom_reward_function(gt_rew_vec)
-
+            
             if trial >307:
                 all_seg_uniq = []
                 all_ses_uniq = []
@@ -772,10 +781,16 @@ elif use_random_MDPs:
                 for i_, seg_pair in enumerate(all_segs):
                     phi_dis1,phi1 = find_reward_features(seg_pair[0],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
                     phi_dis2,phi2 = find_reward_features(seg_pair[1],env,use_extended_SF=use_extended_SF,GAMMA=GAMMA)
-                    all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
+
+                    if use_extended_SF:
+                        _,phi1_rew = find_reward_features(seg_pair[0],env,use_extended_SF=False,GAMMA=GAMMA)
+                        _,phi2_rew = find_reward_features(seg_pair[1],env,use_extended_SF=False,GAMMA=GAMMA)
+                        all_r.append([np.dot(gt_rew_vec,phi1_rew[0:6]), np.dot(gt_rew_vec,phi2_rew[0:6])])
+                    else:
+                        all_r.append([np.dot(gt_rew_vec,phi1[0:6]), np.dot(gt_rew_vec,phi2[0:6])])
+                    
                     all_X.append([phi1, phi2])
 
-        
             pr_X,synth_max_y,expected_returns = generate_synthetic_prefs(all_X,all_r,all_ses,all_actions,all_states,mode,gt_rew_vec=np.array(gt_rew_vec),env=env)
             
         
@@ -784,13 +799,23 @@ elif use_random_MDPs:
             
             rew_vect,all_losses,train_loss = train(aX, ay,plot_loss=False,gt_rew_vec=np.array(gt_rew_vec),env=env)
             
+            # print (rew_vect)
+            # assert False
+            
             if not run_temp_exp:
                 np.save("discount_exp_res/0-30_trial=" + str(trial) + "_" + preference_model + "_" + preference_assum + "_rew_vec", rew_vect)
 
             print ("# of synthetic preferences: " + str(len(pr_X)))
             print ("Ground truth reward vector: " + str(gt_rew_vec))
-            V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA,env=env)
-            pi = build_pi(Q,env=env)
+
+            if use_extended_SF:
+                #derive policy from learned (s,a) weights
+                pi = build_pi_from_feats(rew_vect,env=env)
+            else:
+                #derive policy from learned reward function
+                V,Q = value_iteration(rew_vec =rew_vect,GAMMA=GAMMA,env=env)
+                pi = build_pi(Q,env=env)
+
             V_under_gt = iterative_policy_evaluation(pi,rew_vec = np.array(gt_rew_vec), GAMMA=0.999,env=env)
 
             avg_return = np.sum(V_under_gt)/env.n_starts
@@ -847,7 +872,7 @@ elif mode == "deterministic_user_data":
         combined = list(zip(X_copy, r_copy, y_copy, ses_copy))
         random.Random(100).shuffle(combined)
         X_copy, r_copy, y_copy, ses_copy = zip(*combined)
-        n=100
+        n=10 #number of partitions to split human data
 
         X_copys = [X_copy[i::n] for i in range(n)]
         r_copys = [r_copy[i::n] for i in range(n)]
@@ -856,9 +881,6 @@ elif mode == "deterministic_user_data":
         avg_returns = []
         num_near_opt = 0
         for X_copy, r_copy,y_copy,ses_copy in zip(X_copys, r_copys,y_copys,ses_copys):
-            print ("Number of human prefs used: " + str(len(X_copy)))
-
-
             X_copy, y_copy, X_copy_sytnh, y_copy_synth,_,loss_coef = clean_y(X_copy, r_copy,y_copy,ses_copy)
             aX, ay = augment_data(X_copy,y_copy,"arr")
 

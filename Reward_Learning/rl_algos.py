@@ -73,6 +73,24 @@ def learn_successor_feature_iter(pi,FGAMMA,rew_vec=None,env=None):
             break
     return psi,np.array(psi_actions), psi_Q
 
+def build_pi_from_feats(s_a_weights,env=None):
+    pi = {}
+    if env == None:
+        height = 10
+        width = 10
+    else:
+        height = env.height
+        width = env.width
+
+    s_a_weights = s_a_weights.reshape((env.height,env.width,4))
+
+    for i in range (height):
+        for j in range (width):
+            greedy_a_i = np.argmax(s_a_weights[i][j])
+            pi[(i,j)] = [(1 if a_index == greedy_a_i else 0, a_index) for a_index in range(4)]
+
+    return pi
+
 def build_pi(Q,env=None):
     pi = {}
     actions = [[-1,0],[1,0],[0,-1],[0,1]]
@@ -212,13 +230,13 @@ def value_iteration(rew_vec=None, set_rand_rew = False, GAMMA=0.999,env=None,is_
 def get_gt_avg_return(GAMMA,gt_rew_vec=None,env=None):
     V,Q = value_iteration(rew_vec=gt_rew_vec, env=env,GAMMA=GAMMA)
     pi = build_pi(Q,env=env)
-    V_under_gt = iterative_policy_evaluation(pi, rew_vec=gt_rew_vec, env=env, GAMMA=GAMMA)
+    V_under_gt = iterative_policy_evaluation(pi, rew_vec=gt_rew_vec, env=env, GAMMA=0.999)
     if env == None:
         n_starts = 92
     else:
         n_starts = env.n_starts
     gt_avg_return = np.sum(V_under_gt/n_starts)
-    print ("average return following ground truth policy: ")
-    print (gt_avg_return)
+    # print ("average return following ground truth policy: ")
+    # print (gt_avg_return)
     # print ("=================================================================================\n")
     return gt_avg_return
