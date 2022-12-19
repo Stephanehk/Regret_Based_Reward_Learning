@@ -19,6 +19,47 @@ def is_in_blocked_area(x,y,board):
     else:
         return False
 
+def get_action_index(action):
+    actions = [[-1,0],[1,0],[0,-1],[0,1]]
+    for a_i in range(len(actions)):
+        if actions[a_i][0] == action[0] and actions[a_i][1] == action[1]:
+            return a_i
+    return False
+
+
+def get_sa_list(seg,env,seg_length=3):
+    '''
+    Given a segment, returns a list of states and action indices in the segment. For a segment of length 3, this would be: [[s1, a1], [s2, a2], [s2, a3]]
+
+    Input:
+    - seg: the inputted segment, represented as the segments start state and the sequence of actions that follows
+    - env: the environment object
+    - seg_length: the segment length, measured as number of transitions
+
+    Output:
+    - sa_list:  a list of states and action indices in the segment
+    '''
+    seg_ts_x = seg[0][0]
+    seg_ts_y = seg[0][1]
+
+    prev_x = seg_ts_x
+    prev_y = seg_ts_y
+    sa_list = []
+
+
+
+    for i in range (1,seg_length+1):
+        sa_list.append([seg_ts_x,seg_ts_y,get_action_index(seg[i])])
+   
+        if seg_ts_x + seg[i][0] >= 0 and seg_ts_x + seg[i][0] < len(env.board) and seg_ts_y + seg[i][1] >=0 and seg_ts_y + seg[i][1] < len(env.board[0]) and not is_in_blocked_area(seg_ts_x + seg[i][0], seg_ts_y + seg[i][1], env.board):
+            if not (env.board[seg_ts_x, seg_ts_y] == 1 or env.board[seg_ts_x, seg_ts_y] == 3 or env.board[seg_ts_x, seg_ts_y] == 7 or env.board[seg_ts_x, seg_ts_y] == 9):
+                seg_ts_x += seg[i][0]
+                seg_ts_y += seg[i][1]
+
+        prev_x = seg_ts_x
+        prev_y = seg_ts_y
+    return sa_list, [seg_ts_x,seg_ts_y]
+
 def find_reward_features(seg,env,use_extended_SF=False,GAMMA=1,seg_length=3):
     '''
     Given a segment, returns the some of reward features for that segment
@@ -43,8 +84,8 @@ def find_reward_features(seg,env,use_extended_SF=False,GAMMA=1,seg_length=3):
     actions = [[-1,0],[1,0],[0,-1],[0,1]]
 
     if use_extended_SF:
-        phi = np.zeros(6+(4 * env.width * env.height))
-        phi_dis = np.zeros(6+(4 * env.width * env.height))
+        phi = np.zeros((4 * env.width * env.height))
+        phi_dis = np.zeros((4 * env.width * env.height))
     else:
         phi = np.zeros(6)
         phi_dis = np.zeros(6)
@@ -68,7 +109,6 @@ def find_reward_features(seg,env,use_extended_SF=False,GAMMA=1,seg_length=3):
                 state_sf = (get_state_feature(seg_ts_x,seg_ts_y,env)*[1,0,0,0,0,1])
 
         if use_extended_SF:
-
             #find action index
             for a_i, action_ in enumerate(actions):
                 if action_[0] == seg[i][0] and action_[1] == seg[i][1]:
@@ -79,8 +119,9 @@ def find_reward_features(seg,env,use_extended_SF=False,GAMMA=1,seg_length=3):
                 dis_action_sf = np.zeros(env.height*env.width*4)
             else:
                 dis_action_sf =(GAMMA**(i-1))*get_action_feature(prev_x, prev_y, action_index,env=env)
-            dis_state_sf = list(dis_state_sf)
-            dis_state_sf.extend(dis_action_sf)
+            # dis_state_sf = list(dis_state_sf)
+            # dis_state_sf.extend(dis_action_sf)
+            dis_state_sf = dis_action_sf
 
             if env.board[prev_x, prev_y] == 1 or env.board[prev_x, prev_y] == 3 or env.board[prev_x, prev_y] == 7 or env.board[prev_x, prev_y] == 9:
                 action_sf = np.zeros(env.height*env.width*4)
@@ -88,8 +129,9 @@ def find_reward_features(seg,env,use_extended_SF=False,GAMMA=1,seg_length=3):
                 action_sf =get_action_feature(prev_x, prev_y, action_index,env=env)
 
             # print ("action_sf: " + str(action_sf))
-            state_sf = list(state_sf)
-            state_sf.extend(action_sf)
+            # state_sf = list(state_sf)
+            # state_sf.extend(action_sf)
+            state_sf = action_sf
 
         phi_dis += dis_state_sf
         phi+= state_sf
@@ -156,6 +198,16 @@ def format_y(Y,ytype="scalar"):
         formatted_y = Y
     return torch.tensor(formatted_y,dtype=torch.float)
 
+# def find_end_state(sa_list_1, env):
+    
+#     if sa_list_1[-1][0] + env.actions[sa_list_1[-1][2]][0] >= env.height or sa_list_1[-1][0] + env.actions[sa_list_1[-1][2]][0] < 0 or sa_list_1[-1][1] + env.actions[sa_list_1[-1][2]][1] >= env.width or sa_list_1[-1][1] + env.actions[sa_list_1[-1][2]][1] < 0:
+#         ses1 = [[sa_list_1[0][0], sa_list_1[0][1]], [sa_list_1[2][0], sa_list_1[2][1]]]
+#     elif env.is_blocked(sa_list_1[-1][0] + env.actions[sa_list_1[-1][2]][0],sa_list_1[-1][1] + env.actions[sa_list_1[-1][2]][1]) or env.is_terminal( sa_list_1[-1][0] + env.actions[sa_list_1[-1][2]][0],sa_list_1[-1][1] + env.actions[sa_list_1[-1][2]][1]):
+#         ses1 = [[sa_list_1[0][0], sa_list_1[0][1]], [sa_list_1[2][0], sa_list_1[2][1]]]
+#     else:
+#         ses1 = [[sa_list_1[0][0], sa_list_1[0][1]], [sa_list_1[-1][0] + env.actions[sa_list_1[-1][2]][0], sa_list_1[-1][1] + env.actions[sa_list_1[-1][2]][1]]]
+#     return ses1
+
 
 def format_X(X):
     '''
@@ -208,6 +260,10 @@ def get_pref(arr,include_eps = True):
     '''
     Given a segment pair stastic (partial return, regret, etc.), returns the error-free preference for that segment pair
     '''
+    if include_eps:
+        arr[0] = np.round(arr[0],1)
+        arr[1] = np.round(arr[1],1)
+        
     if (arr[0] > arr[1]):
         res = [1,0]
     elif (arr[1] > arr[0]):

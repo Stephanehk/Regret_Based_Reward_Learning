@@ -88,9 +88,12 @@ def build_pi_from_nn_feats(model, env=None):
     for i in range (height):
         for j in range (width):
             with torch.no_grad():
-                greedy_a_i = np.argmax([model.get_trans_val(torch.tensor([i,j,a_i]).to(device).float()).cpu() for a_i in range(4)])
-            
-            pi[(i,j)] = [(1 if a_index == greedy_a_i else 0, a_index) for a_index in range(4)]
+                # greedy_a_i = np.argmax([model.get_trans_val(torch.tensor([i,j,a_i]).to(device).float()).cpu() for a_i in range(4)])
+                max_weight = np.max([model.get_trans_val(torch.tensor([i,j,a_i]).to(device).float()).cpu() for a_i in range(4)])
+                count = [model.get_trans_val(torch.tensor([i,j,a_i]).to(device).float()).cpu() for a_i in range(4)].count(max_weight)
+                pi[(i,j)] = [(1/count if model.get_trans_val(torch.tensor([i,j,a_index]).to(device).float()).cpu()  == max_weight else 0, a_index) for a_index in range(4)]
+
+            #pi[(i,j)] = [(1 if a_index == greedy_a_i else 0, a_index) for a_index in range(4)]
 
     return pi
 
@@ -108,8 +111,10 @@ def build_pi_from_feats(s_a_weights,env=None):
 
     for i in range (height):
         for j in range (width):
-            greedy_a_i = np.argmax(s_a_weights[i][j])
-            pi[(i,j)] = [(1 if a_index == greedy_a_i else 0, a_index) for a_index in range(4)]
+            # greedy_a_i = np.argmax(s_a_weights[i][j])
+            max_weight = max(s_a_weights[i][j])
+            count = s_a_weights[i][j].tolist().count(max_weight)
+            pi[(i,j)] = [(1/count if s_a_weights[i][j][a_index] == max_weight else 0, a_index) for a_index in range(4)]
 
     return pi
 
