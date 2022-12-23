@@ -1,5 +1,6 @@
 import torch
 
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 class RewardFunctionPR(torch.nn.Module):
     '''
@@ -10,6 +11,7 @@ class RewardFunctionPR(torch.nn.Module):
         self.n_features = n_features
         self.GAMMA = GAMMA
         self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False)
+        
 
     def forward(self, phi):
         pr = torch.squeeze(self.linear1(phi))
@@ -21,7 +23,7 @@ class RewardFunctionPR(torch.nn.Module):
 class RewardFunctionPRGen(torch.nn.Module):
     '''
     The partial return reward learning model, but generalizes the features rather than learning a weight for each individual feature.
-    This is useful when the feature space is too large, such as when learning (state, action) pair values rather than reward feature values. 
+    This is useful when the feature space is too large, such as when learning (state, action) pair values rather than reward feature values.
     '''
     def __init__(self,GAMMA, n_features=400):
         super(RewardFunctionPRGen, self).__init__()
@@ -33,7 +35,7 @@ class RewardFunctionPRGen(torch.nn.Module):
         self.linear2 = torch.nn.Linear(128, 1)
         self.activation =  torch.nn.Tanh()
 
-    def forward(self, sa_list):        
+    def forward(self, sa_list):
         pr = torch.squeeze(self.linear2(self.activation(self.linear1(sa_list))))
         pr = torch.sum(pr, dim=2)
 
@@ -41,7 +43,7 @@ class RewardFunctionPRGen(torch.nn.Module):
         right_pred = torch.sigmoid(torch.subtract(pr[:,1:2],pr[:,0:1]))
         phi_logit = torch.stack([left_pred,right_pred],axis=1)
         return phi_logit
-    
+
     def get_trans_val(self,trans):
         return torch.squeeze(self.linear2(self.activation(self.linear1(trans))))
 
@@ -65,7 +67,7 @@ class RewardFunctionRegret(torch.nn.Module):
         self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False).double()
 
         self.softmax = torch.nn.Softmax(dim=1)
-        
+
         #optionally set weights for the deterministic regret model
         if preference_weights is not None:
             self.rw = preference_weights[0][0]
