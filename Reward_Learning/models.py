@@ -11,7 +11,9 @@ class RewardFunctionPR(torch.nn.Module):
         self.n_features = n_features
         self.GAMMA = GAMMA
         self.linear1 = torch.nn.Linear(self.n_features, 1,bias=False)
-        
+        # torch.nn.init.normal_( self.linear1.weight, mean=0.0, std=0.3)
+        # self.linear1.weight = torch.nn.Parameter(torch.ones_like(self.linear1.weight)*-100)
+
 
     def forward(self, phi):
         pr = torch.squeeze(self.linear1(phi))
